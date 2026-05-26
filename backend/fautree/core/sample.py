@@ -13,9 +13,9 @@ def build_sample_project() -> FaultTreeProject:
     return FaultTreeProject(
         schema_version="0.1.0",
         project=ProjectMetadata(
-            id="demo-train-control",
-            name="Train Control Communication Failure",
-            description="Starter example for the Phase 1 FAUTree shell.",
+            id="generic-fault-tree",
+            name="Generic Fault Tree Project",
+            description="Starter example for the FAUTree shell.",
         ),
         analysis=AnalysisSettings(
             mission_time=1000.0,
@@ -23,13 +23,13 @@ def build_sample_project() -> FaultTreeProject:
             variable_ordering="topological",
         ),
         nodes=[
-            FaultTreeNode("top", "top_event", "Train control unavailable"),
-            FaultTreeNode("g1", "gate", "Communication failure", gate_type="OR"),
-            FaultTreeNode("e1", "basic_event", "Controller failure", failure_rate=0.000003),
-            FaultTreeNode("g2", "gate", "Redundant link loss", gate_type="AND"),
-            FaultTreeNode("e2", "basic_event", "Primary link disconnected", failure_rate=0.000003),
-            FaultTreeNode("e3", "basic_event", "Backup link disconnected", failure_rate=0.000003),
-            FaultTreeNode("e4", "basic_event", "Switch failure", failure_rate=0.000003),
+            FaultTreeNode("top", "top_event", "System failure"),
+            FaultTreeNode("g1", "gate", "Top event logic", gate_type="OR"),
+            FaultTreeNode("e1", "basic_event", "Power supply failure", failure_rate=0.000002),
+            FaultTreeNode("g2", "gate", "Protection subsystem failure", gate_type="AND"),
+            FaultTreeNode("e2", "basic_event", "Primary protection failure", failure_rate=0.0000015),
+            FaultTreeNode("e3", "basic_event", "Backup protection failure", failure_rate=0.0000015),
+            FaultTreeNode("e4", "basic_event", "Control unit failure", failure_rate=0.000003),
         ],
         edges=[
             FaultTreeEdge("top", "g1"),
@@ -40,4 +40,3 @@ def build_sample_project() -> FaultTreeProject:
             FaultTreeEdge("g2", "e3"),
         ],
     )
-

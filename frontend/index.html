@@ -37,8 +37,18 @@
           </div>
           <button class="project-row is-active">
             <span class="project-dot"></span>
-            <span>Train Control Communication Failure</span>
+            <span>Generic Fault Tree Project</span>
           </button>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-heading">
+            <span>Builder</span>
+          </div>
+          <div class="builder-switch" role="tablist" aria-label="Fault tree builder mode">
+            <button class="mode-button is-active" data-builder-mode="graphical">Graphical</button>
+            <button class="mode-button" data-builder-mode="textual">Textual</button>
+          </div>
         </section>
 
         <section class="panel-block">
@@ -55,26 +65,37 @@
           </div>
         </section>
 
+        <section class="panel-block graphical-controls is-active" data-builder-panel="graphical">
+          <div class="section-heading">
+            <span>Edit Node</span>
+          </div>
+          <label class="field">
+            <span>Label</span>
+            <input id="node-label-input" type="text" value="New basic event">
+          </label>
+          <label class="field">
+            <span>Failure rate</span>
+            <input id="node-rate-input" type="text" value="3e-6">
+          </label>
+          <div class="edit-actions">
+            <button class="primary-button" id="add-child-node">Add Child</button>
+            <button class="quiet-button" id="rename-node">Rename</button>
+            <button class="quiet-button danger-button" id="delete-node">Delete</button>
+          </div>
+        </section>
+
         <section class="panel-block">
           <div class="section-heading">
             <span>Model</span>
           </div>
-          <ul class="tree-list">
-            <li><button data-node-link="top">Train control unavailable</button></li>
-            <li><button data-node-link="g1">Communication failure</button></li>
-            <li><button data-node-link="g2">Redundant link loss</button></li>
-            <li><button data-node-link="e1">Controller failure</button></li>
-            <li><button data-node-link="e2">Primary link disconnected</button></li>
-            <li><button data-node-link="e3">Backup link disconnected</button></li>
-            <li><button data-node-link="e4">Switch failure</button></li>
-          </ul>
+          <ul class="tree-list" id="tree-list"></ul>
         </section>
       </aside>
 
       <main class="workspace">
         <div class="workspace-header">
           <div>
-            <h2>Fault Tree Model</h2>
+            <h2 id="builder-title">Graphical Fault Tree Builder</h2>
             <p id="status-line">Ready</p>
           </div>
           <div class="canvas-controls">
@@ -84,55 +105,22 @@
           </div>
         </div>
 
-        <section class="canvas-wrap" aria-label="Fault tree canvas">
-          <div class="fault-stage">
-            <svg class="fault-lines" viewBox="0 0 660 520" aria-hidden="true">
-              <path d="M330 88 L330 118" />
-              <path d="M330 192 L330 224" />
-              <path d="M330 224 L124 224 L124 252" />
-              <path d="M330 224 L330 252" />
-              <path d="M330 224 L536 224 L536 252" />
-              <path d="M330 324 L330 354" />
-              <path d="M330 354 L229 354 L229 380" />
-              <path d="M330 354 L464 354 L464 380" />
-            </svg>
+        <section class="builder-panel is-active" data-builder-panel="graphical">
+          <div class="canvas-wrap" aria-label="Fault tree canvas">
+            <div class="fault-stage" id="fault-stage">
+              <svg class="fault-lines" id="fault-lines" viewBox="0 0 760 560" aria-hidden="true"></svg>
+              <div class="graph-layer" id="graph-layer"></div>
+            </div>
+          </div>
+        </section>
 
-            <button class="fault-node event-node top-event is-selected" data-node-id="top">
-              <span class="node-kind">Top event</span>
-              <strong>Train control unavailable</strong>
-            </button>
-
-            <button class="fault-node gate-node or-gate" data-node-id="g1">
-              <span>OR</span>
-            </button>
-
-            <button class="fault-node event-node basic-event event-left" data-node-id="e1">
-              <span class="node-kind">Basic event</span>
-              <strong>Controller failure</strong>
-              <small>lambda 3.0e-6 / h</small>
-            </button>
-
-            <button class="fault-node gate-node and-gate" data-node-id="g2">
-              <span>AND</span>
-            </button>
-
-            <button class="fault-node event-node basic-event event-right" data-node-id="e4">
-              <span class="node-kind">Basic event</span>
-              <strong>Switch failure</strong>
-              <small>lambda 3.0e-6 / h</small>
-            </button>
-
-            <button class="fault-node event-node basic-event leaf-left" data-node-id="e2">
-              <span class="node-kind">Basic event</span>
-              <strong>Primary link disconnected</strong>
-              <small>lambda 3.0e-6 / h</small>
-            </button>
-
-            <button class="fault-node event-node basic-event leaf-right" data-node-id="e3">
-              <span class="node-kind">Basic event</span>
-              <strong>Backup link disconnected</strong>
-              <small>lambda 3.0e-6 / h</small>
-            </button>
+        <section class="builder-panel textual-builder" data-builder-panel="textual">
+          <div class="text-editor-wrap">
+            <textarea id="fault-tree-text" spellcheck="false"></textarea>
+            <div class="text-actions">
+              <button class="primary-button" id="apply-text-model">Apply Text Model</button>
+              <button class="quiet-button" id="reset-text-model">Reset Text</button>
+            </div>
           </div>
         </section>
       </main>
@@ -145,7 +133,7 @@
           <dl class="property-list">
             <div>
               <dt>Name</dt>
-              <dd id="node-name">Train control unavailable</dd>
+              <dd id="node-name">System failure</dd>
             </div>
             <div>
               <dt>Type</dt>
@@ -168,7 +156,7 @@
           </div>
           <label class="field">
             <span>Mission time</span>
-            <input type="number" value="1000" min="0">
+            <input id="mission-time-input" type="number" value="1000" min="0">
           </label>
           <label class="field">
             <span>Time unit</span>
@@ -207,19 +195,7 @@
             </thead>
             <tbody>
               <tr>
-                <td>{ Controller failure }</td>
-                <td>1</td>
-                <td><span class="pill risk-high">Critical</span></td>
-              </tr>
-              <tr>
-                <td>{ Switch failure }</td>
-                <td>1</td>
-                <td><span class="pill risk-high">Critical</span></td>
-              </tr>
-              <tr>
-                <td>{ Primary link disconnected, Backup link disconnected }</td>
-                <td>2</td>
-                <td><span class="pill risk-medium">Redundant</span></td>
+                <td colspan="3">Run analysis to compute cut sets.</td>
               </tr>
             </tbody>
           </table>
@@ -229,15 +205,15 @@
           <div class="metric-grid">
             <article>
               <span>Mission time</span>
-              <strong>1000 h</strong>
+              <strong id="metric-mission-time">1000 h</strong>
             </article>
             <article>
               <span>Top event probability</span>
-              <strong>5.98e-3</strong>
+              <strong id="metric-top-probability">pending</strong>
             </article>
             <article>
               <span>Approximation</span>
-              <strong>Rare event</strong>
+              <strong>Cut set</strong>
             </article>
           </div>
         </div>
@@ -246,7 +222,7 @@
           <div class="metric-grid">
             <article>
               <span>Variables</span>
-              <strong>4</strong>
+              <strong id="metric-variable-count">4</strong>
             </article>
             <article>
               <span>Ordering</span>

@@ -1,9 +1,9 @@
 {
   "schemaVersion": "0.1.0",
   "project": {
-    "id": "demo-train-control",
-    "name": "Train Control Communication Failure",
-    "description": "Starter example for the Phase 1 FAUTree shell.",
+    "id": "generic-fault-tree",
+    "name": "Generic Fault Tree Project",
+    "description": "Starter example for FAUTree.",
     "createdBy": "FAUTree"
   },
   "analysis": {
@@ -15,42 +15,42 @@
     {
       "id": "top",
       "type": "top_event",
-      "label": "Train control unavailable"
+      "label": "System failure"
     },
     {
       "id": "g1",
       "type": "gate",
       "gateType": "OR",
-      "label": "Communication failure"
+      "label": "Top event logic"
     },
     {
       "id": "e1",
       "type": "basic_event",
-      "label": "Controller failure",
-      "failureRate": 0.000003
+      "label": "Power supply failure",
+      "failureRate": 0.000002
     },
     {
       "id": "g2",
       "type": "gate",
       "gateType": "AND",
-      "label": "Redundant link loss"
+      "label": "Protection subsystem failure"
     },
     {
       "id": "e2",
       "type": "basic_event",
-      "label": "Primary link disconnected",
-      "failureRate": 0.000003
+      "label": "Primary protection failure",
+      "failureRate": 0.0000015
     },
     {
       "id": "e3",
       "type": "basic_event",
-      "label": "Backup link disconnected",
-      "failureRate": 0.000003
+      "label": "Backup protection failure",
+      "failureRate": 0.0000015
     },
     {
       "id": "e4",
       "type": "basic_event",
-      "label": "Switch failure",
+      "label": "Control unit failure",
       "failureRate": 0.000003
     }
   ],
@@ -81,4 +81,3 @@
     }
   ]
 }
-
