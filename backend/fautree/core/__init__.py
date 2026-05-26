@@ -1,0 +1,2 @@
+"""Core FAUTree domain model."""
+

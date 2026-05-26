@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "0.1.0",
+  "project": {
+    "id": "demo-train-control",
+    "name": "Train Control Communication Failure",
+    "description": "Starter example for the Phase 1 FAUTree shell.",
+    "createdBy": "FAUTree"
+  },
+  "analysis": {
+    "missionTime": 1000,
+    "timeUnit": "hour",
+    "variableOrdering": "topological"
+  },
+  "nodes": [
+    {
+      "id": "top",
+      "type": "top_event",
+      "label": "Train control unavailable"
+    },
+    {
+      "id": "g1",
+      "type": "gate",
+      "gateType": "OR",
+      "label": "Communication failure"
+    },
+    {
+      "id": "e1",
+      "type": "basic_event",
+      "label": "Controller failure",
+      "failureRate": 0.000003
+    },
+    {
+      "id": "g2",
+      "type": "gate",
+      "gateType": "AND",
+      "label": "Redundant link loss"
+    },
+    {
+      "id": "e2",
+      "type": "basic_event",
+      "label": "Primary link disconnected",
+      "failureRate": 0.000003
+    },
+    {
+      "id": "e3",
+      "type": "basic_event",
+      "label": "Backup link disconnected",
+      "failureRate": 0.000003
+    },
+    {
+      "id": "e4",
+      "type": "basic_event",
+      "label": "Switch failure",
+      "failureRate": 0.000003
+    }
+  ],
+  "edges": [
+    {
+      "source": "top",
+      "target": "g1"
+    },
+    {
+      "source": "g1",
+      "target": "e1"
+    },
+    {
+      "source": "g1",
+      "target": "g2"
+    },
+    {
+      "source": "g1",
+      "target": "e4"
+    },
+    {
+      "source": "g2",
+      "target": "e2"
+    },
+    {
+      "source": "g2",
+      "target": "e3"
+    }
+  ]
+}
+

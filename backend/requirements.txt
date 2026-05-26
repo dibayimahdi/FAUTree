@@ -1,0 +1,9 @@
+# Phase 1 runs with the Python standard library only.
+#
+# Planned analysis/runtime dependencies for later phases:
+# fastapi
+# uvicorn
+# dd
+# numpy
+# networkx
+

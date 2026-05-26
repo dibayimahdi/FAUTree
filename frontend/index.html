@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FAUTree</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block" aria-label="FAUTree">
+          <div class="brand-mark">FT</div>
+          <div>
+            <h1>FAUTree</h1>
+            <p>Fault Analysis Utility for Fault Tree Analysis</p>
+          </div>
+        </div>
+        <nav class="top-tabs" aria-label="Primary">
+          <button class="top-tab is-active">Model</button>
+          <button class="top-tab">Analyze</button>
+          <button class="top-tab">BDD</button>
+          <button class="top-tab">Report</button>
+        </nav>
+        <div class="top-actions">
+          <button class="quiet-button">Import</button>
+          <button class="quiet-button">Export</button>
+          <button class="primary-button" id="run-analysis">Run Analysis</button>
+        </div>
+      </header>
+
+      <aside class="sidebar">
+        <section class="panel-block">
+          <div class="section-heading">
+            <span>Project</span>
+            <button class="icon-button" title="New project" aria-label="New project">+</button>
+          </div>
+          <button class="project-row is-active">
+            <span class="project-dot"></span>
+            <span>Train Control Communication Failure</span>
+          </button>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-heading">
+            <span>Tools</span>
+          </div>
+          <div class="tool-grid" role="toolbar" aria-label="Fault tree tools">
+            <button class="tool-button is-active" data-tool="select" title="Select">Select</button>
+            <button class="tool-button" data-tool="top" title="Top event">Top</button>
+            <button class="tool-button" data-tool="basic" title="Basic event">BE</button>
+            <button class="tool-button" data-tool="and" title="AND gate">AND</button>
+            <button class="tool-button" data-tool="or" title="OR gate">OR</button>
+            <button class="tool-button" data-tool="link" title="Connect nodes">Link</button>
+          </div>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-heading">
+            <span>Model</span>
+          </div>
+          <ul class="tree-list">
+            <li><button data-node-link="top">Train control unavailable</button></li>
+            <li><button data-node-link="g1">Communication failure</button></li>
+            <li><button data-node-link="g2">Redundant link loss</button></li>
+            <li><button data-node-link="e1">Controller failure</button></li>
+            <li><button data-node-link="e2">Primary link disconnected</button></li>
+            <li><button data-node-link="e3">Backup link disconnected</button></li>
+            <li><button data-node-link="e4">Switch failure</button></li>
+          </ul>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <div class="workspace-header">
+          <div>
+            <h2>Fault Tree Model</h2>
+            <p id="status-line">Ready</p>
+          </div>
+          <div class="canvas-controls">
+            <button class="icon-button" title="Zoom out" aria-label="Zoom out">-</button>
+            <span>100%</span>
+            <button class="icon-button" title="Zoom in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+
+        <section class="canvas-wrap" aria-label="Fault tree canvas">
+          <div class="fault-stage">
+            <svg class="fault-lines" viewBox="0 0 660 520" aria-hidden="true">
+              <path d="M330 88 L330 118" />
+              <path d="M330 192 L330 224" />
+              <path d="M330 224 L124 224 L124 252" />
+              <path d="M330 224 L330 252" />
+              <path d="M330 224 L536 224 L536 252" />
+              <path d="M330 324 L330 354" />
+              <path d="M330 354 L229 354 L229 380" />
+              <path d="M330 354 L464 354 L464 380" />
+            </svg>
+
+            <button class="fault-node event-node top-event is-selected" data-node-id="top">
+              <span class="node-kind">Top event</span>
+              <strong>Train control unavailable</strong>
+            </button>
+
+            <button class="fault-node gate-node or-gate" data-node-id="g1">
+              <span>OR</span>
+            </button>
+
+            <button class="fault-node event-node basic-event event-left" data-node-id="e1">
+              <span class="node-kind">Basic event</span>
+              <strong>Controller failure</strong>
+              <small>lambda 3.0e-6 / h</small>
+            </button>
+
+            <button class="fault-node gate-node and-gate" data-node-id="g2">
+              <span>AND</span>
+            </button>
+
+            <button class="fault-node event-node basic-event event-right" data-node-id="e4">
+              <span class="node-kind">Basic event</span>
+              <strong>Switch failure</strong>
+              <small>lambda 3.0e-6 / h</small>
+            </button>
+
+            <button class="fault-node event-node basic-event leaf-left" data-node-id="e2">
+              <span class="node-kind">Basic event</span>
+              <strong>Primary link disconnected</strong>
+              <small>lambda 3.0e-6 / h</small>
+            </button>
+
+            <button class="fault-node event-node basic-event leaf-right" data-node-id="e3">
+              <span class="node-kind">Basic event</span>
+              <strong>Backup link disconnected</strong>
+              <small>lambda 3.0e-6 / h</small>
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <aside class="inspector">
+        <section class="panel-block">
+          <div class="section-heading">
+            <span>Properties</span>
+          </div>
+          <dl class="property-list">
+            <div>
+              <dt>Name</dt>
+              <dd id="node-name">Train control unavailable</dd>
+            </div>
+            <div>
+              <dt>Type</dt>
+              <dd id="node-type">Top event</dd>
+            </div>
+            <div>
+              <dt>Gate</dt>
+              <dd id="node-gate">None</dd>
+            </div>
+            <div>
+              <dt>Failure rate</dt>
+              <dd id="node-rate">Not assigned</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-heading">
+            <span>Analysis Settings</span>
+          </div>
+          <label class="field">
+            <span>Mission time</span>
+            <input type="number" value="1000" min="0">
+          </label>
+          <label class="field">
+            <span>Time unit</span>
+            <select>
+              <option>hour</option>
+              <option>year</option>
+              <option>cycle</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>BDD ordering</span>
+            <select>
+              <option>topological</option>
+              <option>alphabetical</option>
+              <option>custom</option>
+            </select>
+          </label>
+        </section>
+      </aside>
+
+      <section class="results-pane">
+        <div class="results-tabs" role="tablist" aria-label="Analysis results">
+          <button class="result-tab is-active" data-result-tab="qualitative">Qualitative</button>
+          <button class="result-tab" data-result-tab="quantitative">Quantitative</button>
+          <button class="result-tab" data-result-tab="bdd">BDD</button>
+        </div>
+
+        <div class="result-panel is-active" data-result-panel="qualitative">
+          <table>
+            <thead>
+              <tr>
+                <th>Minimal cut set</th>
+                <th>Order</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{ Controller failure }</td>
+                <td>1</td>
+                <td><span class="pill risk-high">Critical</span></td>
+              </tr>
+              <tr>
+                <td>{ Switch failure }</td>
+                <td>1</td>
+                <td><span class="pill risk-high">Critical</span></td>
+              </tr>
+              <tr>
+                <td>{ Primary link disconnected, Backup link disconnected }</td>
+                <td>2</td>
+                <td><span class="pill risk-medium">Redundant</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="result-panel" data-result-panel="quantitative">
+          <div class="metric-grid">
+            <article>
+              <span>Mission time</span>
+              <strong>1000 h</strong>
+            </article>
+            <article>
+              <span>Top event probability</span>
+              <strong>5.98e-3</strong>
+            </article>
+            <article>
+              <span>Approximation</span>
+              <strong>Rare event</strong>
+            </article>
+          </div>
+        </div>
+
+        <div class="result-panel" data-result-panel="bdd">
+          <div class="metric-grid">
+            <article>
+              <span>Variables</span>
+              <strong>4</strong>
+            </article>
+            <article>
+              <span>Ordering</span>
+              <strong>topological</strong>
+            </article>
+            <article>
+              <span>BDD nodes</span>
+              <strong>pending</strong>
+            </article>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
