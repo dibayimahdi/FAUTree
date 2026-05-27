@@ -424,6 +424,10 @@ button {
   box-shadow: 0 14px 28px rgba(18, 107, 100, 0.18);
 }
 
+.fault-node.is-invalid {
+  border-color: #b42318;
+}
+
 .event-node {
   width: 188px;
   min-height: 74px;
@@ -505,6 +509,11 @@ button {
 .gate-node:hover .gate-symbol path {
   fill: #0a8ad9;
   stroke: var(--teal);
+}
+
+.gate-node.is-invalid .gate-symbol path {
+  fill: #d92d20;
+  stroke: #7a271a;
 }
 
 .sr-only {

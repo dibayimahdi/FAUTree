@@ -13,6 +13,7 @@ let selectedTool = "select";
 let activeBuilderMode = "graphical";
 let nodeSequence = 10;
 let model = createSampleModel();
+let invalidNodeIds = new Set();
 
 const graphLayer = document.querySelector("#graph-layer");
 const faultLines = document.querySelector("#fault-lines");
@@ -296,6 +297,7 @@ function renderCanvas() {
     button.style.top = `${position.y}px`;
     button.title = nodeKindLabel(node);
     button.classList.toggle("is-selected", node.id === selectedNodeId);
+    button.classList.toggle("is-invalid", invalidNodeIds.has(node.id));
 
     if (node.kind === "gate") {
       button.innerHTML = createGateSymbol(node.gate);
@@ -334,6 +336,7 @@ function selectNode(nodeId) {
     return;
   }
 
+  refreshInvalidNodes();
   selectedNodeId = nodeId;
   labelInput.value = selected.label;
   nodeKindSelect.value = nodeKindValue(selected);
@@ -1112,15 +1115,27 @@ function runAnalysis() {
 }
 
 function validateModelForAnalysis() {
+  const issues = getModelValidationIssues();
+  invalidNodeIds = new Set(issues.map((issue) => issue.nodeId).filter(Boolean));
+  renderCanvas();
+  renderTreeList();
+  return issues.map((issue) => issue.message);
+}
+
+function refreshInvalidNodes() {
+  invalidNodeIds = new Set(getModelValidationIssues().map((issue) => issue.nodeId).filter(Boolean));
+}
+
+function getModelValidationIssues() {
   const errors = [];
   const root = model.nodes[model.rootId];
 
   if (!root) {
-    return ["The model has no top event."];
+    return [{ nodeId: "", message: "The model has no top event." }];
   }
 
   if (root.children.length === 0) {
-    return ["Add an AND or OR gate below the top event before running analysis."];
+    return [{ nodeId: root.id, message: "Add an AND or OR gate below the top event before running analysis." }];
   }
 
   visitTree(model.rootId, (node) => {
@@ -1129,12 +1144,18 @@ function validateModelForAnalysis() {
     }
 
     if (node.children.length === 0) {
-      errors.push(`${node.label} has no input events. Add at least two inputs before running analysis.`);
+      errors.push({
+        nodeId: node.id,
+        message: `${node.label} has no input events. Add at least two inputs before running analysis.`,
+      });
       return;
     }
 
     if (node.children.length === 1) {
-      errors.push(`${node.label} has only one input event. AND/OR gates need at least two inputs.`);
+      errors.push({
+        nodeId: node.id,
+        message: `${node.label} has only one input event. AND/OR gates need at least two inputs.`,
+      });
     }
   });
 
@@ -1151,6 +1172,7 @@ function renderAll() {
   if (!model.nodes[selectedNodeId]) {
     selectedNodeId = model.rootId;
   }
+  refreshInvalidNodes();
   renderCanvas();
   renderTreeList();
   selectNode(selectedNodeId);
