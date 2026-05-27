@@ -343,14 +343,6 @@ button {
   font-size: 20px;
 }
 
-.canvas-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .canvas-wrap {
   min-height: 0;
   height: 100%;

@@ -91,6 +91,40 @@ class FaultTreeProject:
             "edges": [edge.to_dict() for edge in self.edges],
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict) -> "FaultTreeProject":
+        project_payload = payload.get("project", {})
+        analysis_payload = payload.get("analysis", {})
+        return cls(
+            schema_version=payload.get("schemaVersion", "0.1.0"),
+            project=ProjectMetadata(
+                id=project_payload.get("id", "untitled"),
+                name=project_payload.get("name", "Untitled Fault Tree"),
+                description=project_payload.get("description", ""),
+                created_by=project_payload.get("createdBy", "FAUTree"),
+            ),
+            analysis=AnalysisSettings(
+                mission_time=float(analysis_payload.get("missionTime", 1000.0)),
+                time_unit=analysis_payload.get("timeUnit", "hour"),
+                variable_ordering=analysis_payload.get("variableOrdering", "topological"),
+            ),
+            nodes=[
+                FaultTreeNode(
+                    id=node["id"],
+                    type=node["type"],
+                    label=node["label"],
+                    gate_type=node.get("gateType"),
+                    failure_rate=node.get("failureRate"),
+                    probability=node.get("probability"),
+                )
+                for node in payload.get("nodes", [])
+            ],
+            edges=[
+                FaultTreeEdge(source=edge["source"], target=edge["target"])
+                for edge in payload.get("edges", [])
+            ],
+        )
+
     def validate(self) -> list[str]:
         errors: list[str] = []
         node_ids = {node.id for node in self.nodes}
