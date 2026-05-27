@@ -224,6 +224,14 @@ button {
   box-shadow: inset 3px 0 0 var(--teal);
 }
 
+.project-title-field {
+  margin-top: 14px;
+}
+
+.full-button {
+  width: 100%;
+}
+
 .project-dot {
   width: 10px;
   height: 10px;
@@ -234,7 +242,7 @@ button {
 
 .tool-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
@@ -281,6 +289,16 @@ button {
 
 .edit-actions .danger-button {
   grid-column: 1 / -1;
+}
+
+.sr-only-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .tree-list {
@@ -443,6 +461,11 @@ button {
 
 .basic-event {
   border-color: rgba(49, 95, 125, 0.25);
+}
+
+.intermediate-event {
+  border-color: rgba(83, 109, 69, 0.34);
+  background: #fbfff7;
 }
 
 .gate-node {

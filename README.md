@@ -41,7 +41,19 @@ http://localhost:8000/api/projects/sample
 http://localhost:8000/api/schema
 ```
 
+## Phase 2A editor workflow
+
+In the frontend:
+
+- Click `+` in the Project panel to start a new empty fault tree with one top event.
+- Rename the project with the Project title field.
+- Select a node, edit its label/type/rate, and click Apply.
+- Choose a child type, then add child or sibling nodes.
+- Use Move Up/Move Down to reorder sibling nodes.
+- Use Export to save a `.fautree.json` project file.
+- Use Import to load a saved FAUTree JSON project.
+- Use Textual mode to edit a tree as lines such as `System failure = OR(A, B)` and `A = BASIC(1e-6)`.
+
 ## Next phases
 
 Phase 2 will replace the static canvas with a proper graph editor and connect the UI to the backend model. The recommended target stack remains React + TypeScript + React Flow for the frontend and Python analysis modules behind an API.
-

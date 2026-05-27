@@ -13,7 +13,7 @@
           <div class="brand-mark">FT</div>
           <div>
             <h1>FAUTree</h1>
-            <p>Fault Analysis Utility for Fault Tree Analysis</p>
+            <p>Fault Tree Analysis</p>
           </div>
         </div>
         <nav class="top-tabs" aria-label="Primary">
@@ -23,8 +23,9 @@
           <button class="top-tab">Report</button>
         </nav>
         <div class="top-actions">
-          <button class="quiet-button">Import</button>
-          <button class="quiet-button">Export</button>
+          <button class="quiet-button" id="import-project">Import</button>
+          <button class="quiet-button" id="export-project">Export</button>
+          <input id="import-project-file" class="sr-only-input" type="file" accept=".json,.fautree,.fautree.json,application/json">
           <button class="primary-button" id="run-analysis">Run Analysis</button>
         </div>
       </header>
@@ -33,12 +34,17 @@
         <section class="panel-block">
           <div class="section-heading">
             <span>Project</span>
-            <button class="icon-button" title="New project" aria-label="New project">+</button>
+            <button class="icon-button" id="new-project" title="New project" aria-label="New project">+</button>
           </div>
           <button class="project-row is-active">
             <span class="project-dot"></span>
-            <span>Generic Fault Tree Project</span>
+            <span id="project-name-display">Generic Fault Tree Project</span>
           </button>
+          <label class="field project-title-field">
+            <span>Project title</span>
+            <input id="project-title-input" type="text" value="Generic Fault Tree Project">
+          </label>
+          <button class="quiet-button full-button" id="rename-project">Rename Project</button>
         </section>
 
         <section class="panel-block">
@@ -57,11 +63,9 @@
           </div>
           <div class="tool-grid" role="toolbar" aria-label="Fault tree tools">
             <button class="tool-button is-active" data-tool="select" title="Select">Select</button>
-            <button class="tool-button" data-tool="top" title="Top event">Top</button>
             <button class="tool-button" data-tool="basic" title="Basic event">BE</button>
             <button class="tool-button" data-tool="and" title="AND gate">AND</button>
             <button class="tool-button" data-tool="or" title="OR gate">OR</button>
-            <button class="tool-button" data-tool="link" title="Connect nodes">Link</button>
           </div>
         </section>
 
@@ -74,12 +78,32 @@
             <input id="node-label-input" type="text" value="New basic event">
           </label>
           <label class="field">
+            <span>Node type</span>
+            <select id="node-kind-select">
+              <option value="basic_event">Basic event</option>
+              <option value="intermediate_event">Intermediate event</option>
+              <option value="and_gate">AND gate</option>
+              <option value="or_gate">OR gate</option>
+            </select>
+          </label>
+          <label class="field">
             <span>Failure rate</span>
             <input id="node-rate-input" type="text" value="3e-6">
           </label>
+          <label class="field">
+            <span>Child type</span>
+            <select id="child-kind-select">
+              <option value="basic_event">Basic event</option>
+              <option value="and_gate">AND gate</option>
+              <option value="or_gate">OR gate</option>
+            </select>
+          </label>
           <div class="edit-actions">
-            <button class="primary-button" id="add-child-node">Add Child</button>
-            <button class="quiet-button" id="rename-node">Rename</button>
+            <button class="primary-button" id="apply-node-properties">Apply</button>
+            <button class="quiet-button" id="add-child-node">Add Child</button>
+            <button class="quiet-button" id="add-sibling-node">Add Sibling</button>
+            <button class="quiet-button" id="move-node-up">Move Left</button>
+            <button class="quiet-button" id="move-node-down">Move Right</button>
             <button class="quiet-button danger-button" id="delete-node">Delete</button>
           </div>
         </section>
@@ -119,6 +143,7 @@
             <textarea id="fault-tree-text" spellcheck="false"></textarea>
             <div class="text-actions">
               <button class="primary-button" id="apply-text-model">Apply Text Model</button>
+              <button class="quiet-button" id="sync-text-model">Sync From Graph</button>
               <button class="quiet-button" id="reset-text-model">Reset Text</button>
             </div>
           </div>
@@ -160,7 +185,7 @@
           </label>
           <label class="field">
             <span>Time unit</span>
-            <select>
+            <select id="time-unit-select">
               <option>hour</option>
               <option>year</option>
               <option>cycle</option>
@@ -168,7 +193,7 @@
           </label>
           <label class="field">
             <span>BDD ordering</span>
-            <select>
+            <select id="bdd-ordering-select">
               <option>topological</option>
               <option>alphabetical</option>
               <option>custom</option>
@@ -237,6 +262,6 @@
       </section>
     </div>
 
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20260527-analysis-validation"></script>
   </body>
 </html>
