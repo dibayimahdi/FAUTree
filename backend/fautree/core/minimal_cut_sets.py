@@ -32,8 +32,12 @@ class _MocusAnalyzer:
         self.project = project
         self.nodes = {node.id: node for node in project.nodes}
         self.children: dict[str, list[str]] = {node.id: [] for node in project.nodes}
+        self.basic_event_id_by_label: dict[str, str] = {}
         for edge in project.edges:
             self.children.setdefault(edge.source, []).append(edge.target)
+        for node in project.nodes:
+            if node.type == "basic_event":
+                self.basic_event_id_by_label.setdefault(node.label, node.id)
 
     def compute(self) -> list[MinimalCutSet]:
         validation_errors = self.project.validate()
@@ -63,7 +67,7 @@ class _MocusAnalyzer:
         child_ids = self.children.get(node_id, [])
 
         if node.type == "basic_event":
-            return [frozenset([node.id])]
+            return [frozenset([self.basic_event_id_by_label[node.label]])]
 
         if node.type in {"top_event", "intermediate_event"}:
             if len(child_ids) != 1:

@@ -148,4 +148,17 @@ class FaultTreeProject:
             if node.type != "gate" and node.gate_type is not None:
                 errors.append(f"Only gate nodes can define gate_type: {node.id}")
 
+        rates_by_basic_event_label: dict[str, set[float]] = {}
+        for node in self.nodes:
+            if node.type != "basic_event":
+                continue
+            rate = float(node.failure_rate or 0)
+            rates_by_basic_event_label.setdefault(node.label, set()).add(rate)
+
+        for label, rates in rates_by_basic_event_label.items():
+            if len(rates) > 1:
+                errors.append(
+                    f'Repeated basic event "{label}" has inconsistent failure rates.'
+                )
+
         return errors

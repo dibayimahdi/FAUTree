@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FAUTree</title>
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css?v=20260527-responsive-polish">
   </head>
   <body>
     <div class="app-shell">
@@ -26,7 +26,8 @@
           <button class="quiet-button" id="import-project">Import</button>
           <button class="quiet-button" id="export-project">Export</button>
           <input id="import-project-file" class="sr-only-input" type="file" accept=".json,.fautree,.fautree.json,application/json">
-          <button class="primary-button" id="run-analysis">Run Analysis</button>
+          <button class="quiet-button" id="show-shortcuts" title="Show keyboard shortcuts">Shortcuts</button>
+          <button class="primary-button" id="run-analysis" title="Run Analysis (Ctrl+Enter)">Run Analysis</button>
         </div>
       </header>
 
@@ -62,10 +63,10 @@
             <span>Tools</span>
           </div>
           <div class="tool-grid" role="toolbar" aria-label="Fault tree tools">
-            <button class="tool-button is-active" data-tool="select" title="Select">Select</button>
-            <button class="tool-button" data-tool="basic" title="Basic event">BE</button>
-            <button class="tool-button" data-tool="and" title="AND gate">AND</button>
-            <button class="tool-button" data-tool="or" title="OR gate">OR</button>
+            <button class="tool-button is-active" data-tool="select" title="Select tool">Select</button>
+            <button class="tool-button" data-tool="basic" title="Basic Event tool (B)">BE</button>
+            <button class="tool-button" data-tool="and" title="AND gate tool (A)">AND</button>
+            <button class="tool-button" data-tool="or" title="OR gate tool (O)">OR</button>
           </div>
         </section>
 
@@ -99,12 +100,12 @@
             </select>
           </label>
           <div class="edit-actions">
-            <button class="primary-button" id="apply-node-properties">Apply</button>
-            <button class="quiet-button" id="add-child-node">Add Child</button>
-            <button class="quiet-button" id="add-sibling-node">Add Sibling</button>
+            <button class="primary-button" id="apply-node-properties" title="Apply current node properties (Ctrl+S)">Apply</button>
+            <button class="quiet-button" id="add-child-node" title="Add child to selected node (C)">Add Child</button>
+            <button class="quiet-button" id="add-sibling-node" title="Add sibling after selected node (S)">Add Sibling</button>
             <button class="quiet-button" id="move-node-up">Move Left</button>
             <button class="quiet-button" id="move-node-down">Move Right</button>
-            <button class="quiet-button danger-button" id="delete-node">Delete</button>
+            <button class="quiet-button danger-button" id="delete-node" title="Delete selected node (Delete)">Delete</button>
           </div>
         </section>
 
@@ -205,6 +206,52 @@
         </div>
 
         <div class="result-panel is-active" data-result-panel="qualitative">
+          <div class="analysis-summary" aria-label="Analysis summary">
+            <article>
+              <span>Minimal cut sets</span>
+              <strong id="summary-cut-set-count">pending</strong>
+            </article>
+            <article>
+              <span>Minimum order</span>
+              <strong id="summary-min-order">pending</strong>
+            </article>
+            <article>
+              <span>Single-point failures</span>
+              <strong id="summary-single-points">pending</strong>
+            </article>
+            <article>
+              <span>Largest order</span>
+              <strong id="summary-largest-order">pending</strong>
+            </article>
+            <article>
+              <span>Top probability</span>
+              <strong id="summary-top-probability">pending</strong>
+            </article>
+            <article>
+              <span>Dominant cut set</span>
+              <strong id="summary-dominant-cut-set">pending</strong>
+            </article>
+            <article>
+              <span>Analysis time</span>
+              <strong id="summary-analysis-time">pending</strong>
+            </article>
+            <article>
+              <span>Basic events</span>
+              <strong id="summary-basic-events">pending</strong>
+            </article>
+            <article>
+              <span>Repeated events</span>
+              <strong id="summary-repeated-events">pending</strong>
+            </article>
+            <article>
+              <span>Analysis engine</span>
+              <strong id="summary-analysis-engine">Python backend</strong>
+            </article>
+            <article>
+              <span>BDD nodes</span>
+              <strong id="summary-bdd-nodes">pending</strong>
+            </article>
+          </div>
           <table>
             <thead>
               <tr>
@@ -257,6 +304,28 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260527-no-placeholder-zoom"></script>
+    <div class="modal-backdrop" id="shortcuts-modal" hidden>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+        <div class="modal-header">
+          <h2 id="shortcuts-title">Keyboard Shortcuts</h2>
+          <button class="icon-button" id="close-shortcuts" title="Close shortcuts" aria-label="Close shortcuts">x</button>
+        </div>
+        <dl class="shortcut-list">
+          <div><dt>Ctrl + Enter</dt><dd>Run Analysis</dd></div>
+          <div><dt>Ctrl + S</dt><dd>Apply current node properties</dd></div>
+          <div><dt>A</dt><dd>AND gate tool</dd></div>
+          <div><dt>O</dt><dd>OR gate tool</dd></div>
+          <div><dt>B</dt><dd>Basic Event tool</dd></div>
+          <div><dt>C</dt><dd>Add Child</dd></div>
+          <div><dt>S</dt><dd>Add Sibling</dd></div>
+          <div><dt>Delete</dt><dd>Delete selected node</dd></div>
+          <div><dt>Ctrl + Z</dt><dd>Undo</dd></div>
+          <div><dt>Ctrl + Y</dt><dd>Redo</dd></div>
+          <div><dt>Ctrl + Shift + Z</dt><dd>Redo</dd></div>
+        </dl>
+      </section>
+    </div>
+
+    <script src="./app.js?v=20260528-shortcut-help"></script>
   </body>
 </html>

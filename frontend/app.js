@@ -6,6 +6,7 @@ Primary protection failure = BASIC(1.5e-6)
 Backup protection failure = BASIC(1.5e-6)`;
 
 const emptyTextModel = `Top event = BASIC(0)`;
+const analysisApiUrl = "http://localhost:8000/api/analyze/minimal-cut-sets";
 
 let projectName = "Generic Fault Tree Project";
 let selectedNodeId = "top";
@@ -14,6 +15,8 @@ let activeBuilderMode = "graphical";
 let nodeSequence = 10;
 let model = createSampleModel();
 let invalidNodeIds = new Set();
+let undoStack = [];
+let redoStack = [];
 
 const graphLayer = document.querySelector("#graph-layer");
 const faultLines = document.querySelector("#fault-lines");
@@ -40,6 +43,20 @@ const qualitativeTableBody = document.querySelector("[data-result-panel='qualita
 const metricMissionTime = document.querySelector("#metric-mission-time");
 const metricTopProbability = document.querySelector("#metric-top-probability");
 const metricVariableCount = document.querySelector("#metric-variable-count");
+const shortcutsModal = document.querySelector("#shortcuts-modal");
+const showShortcutsButton = document.querySelector("#show-shortcuts");
+const closeShortcutsButton = document.querySelector("#close-shortcuts");
+const summaryCutSetCount = document.querySelector("#summary-cut-set-count");
+const summaryMinOrder = document.querySelector("#summary-min-order");
+const summarySinglePoints = document.querySelector("#summary-single-points");
+const summaryLargestOrder = document.querySelector("#summary-largest-order");
+const summaryTopProbability = document.querySelector("#summary-top-probability");
+const summaryDominantCutSet = document.querySelector("#summary-dominant-cut-set");
+const summaryAnalysisTime = document.querySelector("#summary-analysis-time");
+const summaryBasicEvents = document.querySelector("#summary-basic-events");
+const summaryRepeatedEvents = document.querySelector("#summary-repeated-events");
+const summaryAnalysisEngine = document.querySelector("#summary-analysis-engine");
+const summaryBddNodes = document.querySelector("#summary-bdd-nodes");
 
 textArea.value = defaultTextModel;
 
@@ -391,7 +408,63 @@ function setProjectName(name) {
   document.title = `${projectName} - FAUTree`;
 }
 
+function createHistorySnapshot() {
+  return {
+    model: JSON.parse(JSON.stringify(model)),
+    selectedNodeId,
+    projectName,
+    nodeSequence,
+    missionTime: missionTimeInput.value,
+    timeUnit: timeUnitSelect.value,
+    bddOrdering: bddOrderingSelect.value,
+  };
+}
+
+function pushUndoSnapshot() {
+  undoStack.push(createHistorySnapshot());
+  if (undoStack.length > 60) {
+    undoStack.shift();
+  }
+  redoStack = [];
+}
+
+function restoreHistorySnapshot(snapshot, message) {
+  model = JSON.parse(JSON.stringify(snapshot.model));
+  selectedNodeId = snapshot.selectedNodeId;
+  projectName = snapshot.projectName;
+  nodeSequence = snapshot.nodeSequence;
+  missionTimeInput.value = snapshot.missionTime;
+  timeUnitSelect.value = snapshot.timeUnit;
+  bddOrderingSelect.value = snapshot.bddOrdering;
+  setProjectName(projectName);
+  syncTextFromGraph();
+  renderAll();
+  clearAnalysisResults("Run analysis to compute cut sets.");
+  statusLine.textContent = message;
+}
+
+function undoLastChange() {
+  if (undoStack.length === 0) {
+    statusLine.textContent = "Nothing to undo.";
+    return;
+  }
+
+  redoStack.push(createHistorySnapshot());
+  restoreHistorySnapshot(undoStack.pop(), "Undo applied.");
+}
+
+function redoLastChange() {
+  if (redoStack.length === 0) {
+    statusLine.textContent = "Nothing to redo.";
+    return;
+  }
+
+  undoStack.push(createHistorySnapshot());
+  restoreHistorySnapshot(redoStack.pop(), "Redo applied.");
+}
+
 function createNewProject() {
+  pushUndoSnapshot();
   model = createEmptyModel();
   selectedNodeId = model.rootId;
   nodeSequence = 0;
@@ -405,6 +478,7 @@ function createNewProject() {
 }
 
 function renameProject() {
+  pushUndoSnapshot();
   setProjectName(projectTitleInput.value);
   statusLine.textContent = `Project renamed: ${projectName}`;
 }
@@ -418,9 +492,9 @@ function applyNodeProperties() {
     return;
   }
 
-  selected.label = label;
-
   if (selected.kind === "top_event") {
+    pushUndoSnapshot();
+    selected.label = label;
     syncTextFromGraph();
     selectNode(selected.id);
     statusLine.textContent = "Top event updated.";
@@ -434,6 +508,9 @@ function applyNodeProperties() {
     selectNode(selected.id);
     return;
   }
+
+  pushUndoSnapshot();
+  selected.label = label;
 
   if (requestedType === "basic_event") {
     selected.kind = "basic_event";
@@ -489,6 +566,7 @@ function addChildNode() {
       return;
     }
 
+    pushUndoSnapshot();
     parent.kind = "intermediate_event";
     delete parent.failureRate;
     const gateId = nextNodeId("gate");
@@ -501,12 +579,12 @@ function addChildNode() {
     return;
   }
 
-  const id = nextNodeId(type === "and_gate" || type === "or_gate" ? "gate" : "basic_event");
   const requestedLabel = labelInput.value.trim();
   const label = requestedLabel && requestedLabel !== parent.label ? requestedLabel : defaultLabelForType(type);
 
+  pushUndoSnapshot();
+  const id = nextNodeId(type === "and_gate" || type === "or_gate" ? "gate" : "basic_event");
   model.nodes[id] = nodeTemplateFromType(type, id, label, rate);
-
   parent.children.push(id);
   syncTextFromGraph();
   selectNode(id);
@@ -557,12 +635,13 @@ function addSiblingNode() {
 
   const type = childKindSelect.value;
   const rate = parseFailureRate(rateInput.value);
-  const id = nextNodeId(type === "and_gate" || type === "or_gate" ? "gate" : "basic_event");
   const selected = model.nodes[selectedNodeId];
   const requestedLabel = labelInput.value.trim();
   const label = requestedLabel && requestedLabel !== selected?.label ? requestedLabel : defaultLabelForType(type);
   const selectedIndex = parent.children.indexOf(selectedNodeId);
 
+  pushUndoSnapshot();
+  const id = nextNodeId(type === "and_gate" || type === "or_gate" ? "gate" : "basic_event");
   model.nodes[id] = nodeTemplateFromType(type, id, label, rate);
   parent.children.splice(selectedIndex + 1, 0, id);
   syncTextFromGraph();
@@ -588,6 +667,7 @@ function moveSelectedNode(direction) {
     return;
   }
 
+  pushUndoSnapshot();
   [parent.children[currentIndex], parent.children[nextIndex]] = [parent.children[nextIndex], parent.children[currentIndex]];
   syncTextFromGraph();
   selectNode(selectedNodeId);
@@ -596,6 +676,99 @@ function moveSelectedNode(direction) {
 
 function renameSelectedNode() {
   applyNodeProperties();
+}
+
+function openShortcutsModal() {
+  shortcutsModal.hidden = false;
+  closeShortcutsButton.focus();
+}
+
+function closeShortcutsModal() {
+  shortcutsModal.hidden = true;
+  showShortcutsButton.focus();
+}
+
+function isTypingTarget(target) {
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName);
+}
+
+function handleKeyboardShortcut(event) {
+  const key = event.key.toLowerCase();
+  const typing = isTypingTarget(event.target);
+  const commandKey = event.ctrlKey || event.metaKey;
+
+  if (key === "escape" && !shortcutsModal.hidden) {
+    event.preventDefault();
+    closeShortcutsModal();
+    return;
+  }
+
+  if (commandKey && key === "enter") {
+    event.preventDefault();
+    runAnalysis();
+    return;
+  }
+
+  if (commandKey && key === "s") {
+    event.preventDefault();
+    applyNodeProperties();
+    return;
+  }
+
+  if (commandKey && key === "z" && !typing) {
+    event.preventDefault();
+    if (event.shiftKey) {
+      redoLastChange();
+    } else {
+      undoLastChange();
+    }
+    return;
+  }
+
+  if (commandKey && key === "y" && !typing) {
+    event.preventDefault();
+    redoLastChange();
+    return;
+  }
+
+  if (typing || commandKey || event.altKey) {
+    return;
+  }
+
+  if (key === "delete" || key === "backspace") {
+    event.preventDefault();
+    deleteSelectedNode();
+    return;
+  }
+
+  if (key === "a") {
+    event.preventDefault();
+    setTool("and");
+    return;
+  }
+
+  if (key === "o") {
+    event.preventDefault();
+    setTool("or");
+    return;
+  }
+
+  if (key === "b") {
+    event.preventDefault();
+    setTool("basic");
+    return;
+  }
+
+  if (key === "c") {
+    event.preventDefault();
+    addChildNode();
+    return;
+  }
+
+  if (key === "s") {
+    event.preventDefault();
+    addSiblingNode();
+  }
 }
 
 function deleteSelectedNode() {
@@ -609,6 +782,7 @@ function deleteSelectedNode() {
     return;
   }
 
+  pushUndoSnapshot();
   parent.children = parent.children.filter((childId) => childId !== selectedNodeId);
   deleteSubtree(selectedNodeId);
   selectNode(parent.id);
@@ -785,7 +959,9 @@ function splitInfixExpression(expression, operator) {
 
 function applyTextModel() {
   try {
-    model = parseTextModel();
+    const parsedModel = parseTextModel();
+    pushUndoSnapshot();
+    model = parsedModel;
     selectedNodeId = model.rootId;
     updateNodeSequence();
     renderAll();
@@ -957,6 +1133,7 @@ function loadProjectFromJson(project) {
     importedNodes[edge.source].children.push(edge.target);
   });
 
+  pushUndoSnapshot();
   projectName = project.project?.name || "Imported Fault Tree";
   model = {
     rootId: topNodes[0].id,
@@ -1067,9 +1244,10 @@ function clearAnalysisResults(message) {
   metricMissionTime.textContent = `${Number(missionTimeInput.value) || 0} h`;
   metricTopProbability.textContent = "pending";
   metricVariableCount.textContent = String(Object.values(model.nodes).filter((node) => node.kind === "basic_event").length);
+  clearAnalysisSummary();
 }
 
-function runAnalysis() {
+async function runAnalysis() {
   const validationErrors = validateModelForAnalysis();
   if (validationErrors.length > 0) {
     clearAnalysisResults(validationErrors[0]);
@@ -1084,34 +1262,113 @@ function runAnalysis() {
     return;
   }
 
-  const cutSets = minimizeCutSets(computeCutSets(model.rootId));
+  statusLine.textContent = "Sending model to Python backend...";
+  const project = modelToProjectJson();
+  let backendResult;
+  const analysisStart = performance.now();
+  try {
+    const response = await fetch(analysisApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(project),
+    });
+    backendResult = await response.json();
+    if (!response.ok) {
+      throw new Error(backendResult.detail || backendResult.error || "Backend analysis failed.");
+    }
+  } catch (error) {
+    clearAnalysisResults(`Python backend is not available: ${error.message}`);
+    statusLine.textContent = "Analysis blocked: Python backend is not available.";
+    return;
+  }
+  const analysisDuration = performance.now() - analysisStart;
+
+  const cutSets = backendResult.minimalCutSets || [];
   const missionTime = Number(missionTimeInput.value) || 0;
   qualitativeTableBody.innerHTML = "";
 
   if (cutSets.length === 0) {
     clearAnalysisResults("No cut sets found for the current model.");
-    statusLine.textContent = "Analysis refreshed.";
+    statusLine.textContent = "Backend analysis refreshed.";
     return;
   }
 
   cutSets.forEach((cutSet) => {
+    const eventLabels = cutSet.events || [];
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>{ ${cutSet.map(escapeHtml).join(", ")} }</td>
-      <td>${cutSet.length}</td>
-      <td><span class="pill ${cutSet.length === 1 ? "risk-high" : "risk-medium"}">${cutSet.length === 1 ? "Critical" : "Redundant"}</span></td>
+      <td>{ ${eventLabels.map(escapeHtml).join(", ")} }</td>
+      <td>${cutSet.order}</td>
+      <td><span class="pill ${cutSet.order === 1 ? "risk-high" : "risk-medium"}">${cutSet.order === 1 ? "Critical" : "Redundant"}</span></td>
     `;
     qualitativeTableBody.appendChild(row);
   });
 
   const topProbability = cutSets.reduce((total, cutSet) => {
-    return total + cutSet.reduce((product, label) => product * probabilityForLabel(label, missionTime), 1);
+    return total + (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label, missionTime), 1);
   }, 0);
 
   metricMissionTime.textContent = `${missionTime} h`;
   metricTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
   metricVariableCount.textContent = String(Object.values(model.nodes).filter((node) => node.kind === "basic_event").length);
-  statusLine.textContent = "Analysis refreshed.";
+  renderAnalysisSummary(cutSets, topProbability, analysisDuration);
+  statusLine.textContent = `Backend analysis refreshed: ${backendResult.count ?? cutSets.length} minimal cut sets.`;
+}
+
+function clearAnalysisSummary() {
+  summaryCutSetCount.textContent = "pending";
+  summaryMinOrder.textContent = "pending";
+  summarySinglePoints.textContent = "pending";
+  summaryLargestOrder.textContent = "pending";
+  summaryTopProbability.textContent = "pending";
+  summaryDominantCutSet.textContent = "pending";
+  summaryAnalysisTime.textContent = "pending";
+  summaryBasicEvents.textContent = String(getBasicEventNodes().length);
+  summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
+  summaryAnalysisEngine.textContent = "Python backend";
+  summaryBddNodes.textContent = "pending";
+}
+
+function renderAnalysisSummary(cutSets, topProbability, analysisDuration) {
+  const orders = cutSets.map((cutSet) => cutSet.order || 0).filter((order) => order > 0);
+  const singlePointFailures = cutSets.filter((cutSet) => cutSet.order === 1).length;
+  const dominant = findDominantCutSet(cutSets);
+
+  summaryCutSetCount.textContent = String(cutSets.length);
+  summaryMinOrder.textContent = orders.length > 0 ? String(Math.min(...orders)) : "none";
+  summarySinglePoints.textContent = String(singlePointFailures);
+  summaryLargestOrder.textContent = orders.length > 0 ? String(Math.max(...orders)) : "none";
+  summaryTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
+  summaryDominantCutSet.textContent = dominant ? `{ ${dominant.events.join(", ")} }` : "none";
+  summaryAnalysisTime.textContent = `${Math.max(1, Math.round(analysisDuration))} ms`;
+  summaryBasicEvents.textContent = String(getBasicEventNodes().length);
+  summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
+  summaryAnalysisEngine.textContent = "Python backend";
+  summaryBddNodes.textContent = "pending";
+}
+
+function findDominantCutSet(cutSets) {
+  const missionTime = Number(missionTimeInput.value) || 0;
+  return cutSets
+    .map((cutSet) => ({
+      ...cutSet,
+      probability: (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label, missionTime), 1),
+    }))
+    .sort((left, right) => right.probability - left.probability)[0];
+}
+
+function getBasicEventNodes() {
+  return Object.values(model.nodes).filter((node) => node.kind === "basic_event");
+}
+
+function getRepeatedBasicEventLabels() {
+  const counts = new Map();
+  getBasicEventNodes().forEach((node) => {
+    counts.set(node.label, (counts.get(node.label) || 0) + 1);
+  });
+  return [...counts.entries()].filter(([, count]) => count > 1).map(([label]) => label);
 }
 
 function validateModelForAnalysis() {
@@ -1138,6 +1395,8 @@ function getModelValidationIssues() {
     return [{ nodeId: root.id, message: "Add an AND or OR gate below the top event before running analysis." }];
   }
 
+  errors.push(...getRepeatedEventRateIssues());
+
   visitTree(model.rootId, (node) => {
     if (node.kind !== "gate") {
       return;
@@ -1160,6 +1419,33 @@ function getModelValidationIssues() {
   });
 
   return errors;
+}
+
+function getRepeatedEventRateIssues() {
+  const eventsByLabel = new Map();
+  getBasicEventNodes().forEach((node) => {
+    const key = node.label.trim();
+    if (!eventsByLabel.has(key)) {
+      eventsByLabel.set(key, []);
+    }
+    eventsByLabel.get(key).push(node);
+  });
+
+  const issues = [];
+  eventsByLabel.forEach((events, label) => {
+    if (events.length < 2) {
+      return;
+    }
+
+    const rates = new Set(events.map((event) => String(event.failureRate ?? 0)));
+    if (rates.size > 1) {
+      issues.push({
+        nodeId: events[0].id,
+        message: `Repeated basic event "${label}" has inconsistent failure rates. Use the same failure rate or rename one event.`,
+      });
+    }
+  });
+  return issues;
 }
 
 function probabilityForLabel(label, missionTime) {
@@ -1258,7 +1544,15 @@ document.querySelector("#new-project").addEventListener("click", createNewProjec
 document.querySelector("#rename-project").addEventListener("click", renameProject);
 document.querySelector("#import-project").addEventListener("click", () => importProjectInput.click());
 document.querySelector("#export-project").addEventListener("click", exportProject);
+showShortcutsButton.addEventListener("click", openShortcutsModal);
+closeShortcutsButton.addEventListener("click", closeShortcutsModal);
+shortcutsModal.addEventListener("click", (event) => {
+  if (event.target === shortcutsModal) {
+    closeShortcutsModal();
+  }
+});
 importProjectInput.addEventListener("change", (event) => importProjectFile(event.target.files[0]));
+document.addEventListener("keydown", handleKeyboardShortcut);
 projectTitleInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     renameProject();
