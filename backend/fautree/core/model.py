@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 
-NodeType = Literal["top_event", "intermediate_event", "basic_event", "gate"]
+NodeType = Literal["top_event", "intermediate_event", "basic_event", "undeveloped_event", "gate"]
 GateType = Literal["AND", "OR", "K_OF_N"]
 
 
@@ -147,7 +147,7 @@ class FaultTreeProject:
 
         rates_by_basic_event_label: dict[str, set[float]] = {}
         for node in self.nodes:
-            if node.type != "basic_event":
+            if node.type not in {"basic_event", "undeveloped_event"}:
                 continue
             rate = float(node.probability if node.probability is not None else node.failure_rate or 0)
             rates_by_basic_event_label.setdefault(node.label, set()).add(rate)

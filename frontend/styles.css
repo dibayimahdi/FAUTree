@@ -476,6 +476,77 @@ button {
   border-color: rgba(49, 95, 125, 0.25);
 }
 
+.undeveloped-event {
+  width: 140px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 0;
+  height: 140px;
+  padding: 30px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.undeveloped-event:hover,
+.undeveloped-event.is-selected {
+  border-color: transparent;
+  box-shadow: none;
+  filter: drop-shadow(0 14px 14px rgba(180, 35, 24, 0.18));
+}
+
+.undeveloped-event::before,
+.undeveloped-event::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.undeveloped-event::before {
+  inset: 0;
+  z-index: 0;
+  background: rgba(180, 35, 24, 0.38);
+}
+
+.undeveloped-event::after {
+  inset: 2px;
+  z-index: 1;
+  background: #fffafa;
+}
+
+.undeveloped-event > * {
+  position: relative;
+  z-index: 2;
+}
+
+.undeveloped-event .node-kind {
+  font-size: 9px;
+}
+
+.undeveloped-event strong {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.undeveloped-event small {
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.undeveloped-event:hover::before,
+.undeveloped-event.is-selected::before {
+  background: #b42318;
+}
+
+.undeveloped-event.is-invalid::before {
+  background: #b42318;
+}
+
 .intermediate-event {
   border-color: rgba(83, 109, 69, 0.34);
   background: #fbfff7;

@@ -63,8 +63,8 @@
             <span>Tools</span>
           </div>
           <div class="tool-grid" role="toolbar" aria-label="Fault tree tools">
-            <button class="tool-button is-active" data-tool="select" title="Select tool">Select</button>
-            <button class="tool-button" data-tool="basic" title="Basic Event tool (B)">BE</button>
+            <button class="tool-button is-active" data-tool="basic" title="Basic Event tool (B)">BE</button>
+            <button class="tool-button" data-tool="undeveloped" title="Undeveloped Event tool (U)">UND</button>
             <button class="tool-button" data-tool="and" title="AND gate tool (A)">AND</button>
             <button class="tool-button" data-tool="or" title="OR gate tool (O)">OR</button>
           </div>
@@ -82,19 +82,21 @@
             <span>Node type</span>
             <select id="node-kind-select">
               <option value="basic_event">Basic event</option>
+              <option value="undeveloped_event">Undeveloped event</option>
               <option value="intermediate_event">Intermediate event</option>
               <option value="and_gate">AND gate</option>
               <option value="or_gate">OR gate</option>
             </select>
           </label>
           <label class="field">
-            <span>Basic event probability</span>
+            <span>Leaf event probability</span>
             <input id="node-rate-input" type="text" value="0.001">
           </label>
           <label class="field">
             <span>Child type</span>
             <select id="child-kind-select">
               <option value="basic_event">Basic event</option>
+              <option value="undeveloped_event">Undeveloped event</option>
               <option value="and_gate">AND gate</option>
               <option value="or_gate">OR gate</option>
             </select>
@@ -180,7 +182,7 @@
             <select id="bdd-ordering-select">
               <option>topological</option>
               <option>alphabetical</option>
-              <option>custom</option>
+              <option>infix</option>
             </select>
           </label>
         </section>
@@ -224,7 +226,7 @@
               <strong id="summary-analysis-time">pending</strong>
             </article>
             <article>
-              <span>Basic events</span>
+              <span>Leaf events</span>
               <strong id="summary-basic-events">pending</strong>
             </article>
             <article>
@@ -281,11 +283,19 @@
             </article>
             <article>
               <span>Ordering</span>
-              <strong>topological</strong>
+              <strong id="metric-bdd-ordering">pending</strong>
             </article>
             <article>
               <span>BDD nodes</span>
-              <strong>pending</strong>
+              <strong id="metric-bdd-nodes">pending</strong>
+            </article>
+            <article>
+              <span>Exact probability</span>
+              <strong id="metric-bdd-probability">pending</strong>
+            </article>
+            <article>
+              <span>Variable order</span>
+              <strong id="metric-bdd-variable-order">pending</strong>
             </article>
           </div>
         </div>
@@ -304,6 +314,7 @@
           <div><dt>A</dt><dd>AND gate tool</dd></div>
           <div><dt>O</dt><dd>OR gate tool</dd></div>
           <div><dt>B</dt><dd>Basic Event tool</dd></div>
+          <div><dt>U</dt><dd>Undeveloped Event tool</dd></div>
           <div><dt>C</dt><dd>Add Child</dd></div>
           <div><dt>S</dt><dd>Add Sibling</dd></div>
           <div><dt>Delete</dt><dd>Delete selected node</dd></div>
@@ -346,6 +357,6 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260528-consistent-export-download"></script>
+    <script src="./app.js?v=20260528-undeveloped-events"></script>
   </body>
 </html>

@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from backend.fautree import __version__
+from backend.fautree.core.bdd import compute_bdd_analysis
 from backend.fautree.core.minimal_cut_sets import compute_minimal_cut_sets
 from backend.fautree.core.model import FaultTreeProject
 from backend.fautree.core.sample import build_sample_project
@@ -64,7 +65,7 @@ class FAUTreeRequestHandler(BaseHTTPRequestHandler):
                 200,
                 {
                     "schemaVersion": "0.1.0",
-                    "nodeTypes": ["top_event", "intermediate_event", "basic_event", "gate"],
+                    "nodeTypes": ["top_event", "intermediate_event", "basic_event", "undeveloped_event", "gate"],
                     "gateTypes": ["AND", "OR", "K_OF_N"],
                     "requiredEdges": ["source", "target"],
                 },
@@ -101,6 +102,32 @@ class FAUTreeRequestHandler(BaseHTTPRequestHandler):
                     400,
                     {
                         "error": "Could not compute minimal cut sets",
+                        "detail": str(error),
+                    },
+                )
+            return
+
+        if self.path == "/api/analyze/bdd":
+            try:
+                payload = self._read_json_body()
+                project = FaultTreeProject.from_dict(payload)
+                ordering = project.analysis.variable_ordering
+                bdd_result = compute_bdd_analysis(project, ordering)
+                _json_response(
+                    self,
+                    200,
+                    {
+                        "algorithm": "Internal reduced ordered binary decision diagram",
+                        "project": project.project.to_dict(),
+                        "bdd": bdd_result.to_dict(),
+                    },
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                _json_response(
+                    self,
+                    400,
+                    {
+                        "error": "Could not compute BDD analysis",
                         "detail": str(error),
                     },
                 )

@@ -36,7 +36,7 @@ class _MocusAnalyzer:
         for edge in project.edges:
             self.children.setdefault(edge.source, []).append(edge.target)
         for node in project.nodes:
-            if node.type == "basic_event":
+            if node.type in {"basic_event", "undeveloped_event"}:
                 self.basic_event_id_by_label.setdefault(node.label, node.id)
 
     def compute(self) -> list[MinimalCutSet]:
@@ -66,7 +66,7 @@ class _MocusAnalyzer:
         node = self._node(node_id)
         child_ids = self.children.get(node_id, [])
 
-        if node.type == "basic_event":
+        if node.type in {"basic_event", "undeveloped_event"}:
             return [frozenset([self.basic_event_id_by_label[node.label]])]
 
         if node.type in {"top_event", "intermediate_event"}:

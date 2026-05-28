@@ -111,6 +111,31 @@ class MinimalCutSetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inconsistent probabilities"):
             compute_minimal_cut_sets(project)
 
+    def test_undeveloped_event_is_treated_as_leaf_event(self) -> None:
+        project = FaultTreeProject(
+            schema_version="0.1.0",
+            project=ProjectMetadata(id="undeveloped", name="Undeveloped event"),
+            analysis=AnalysisSettings(),
+            nodes=[
+                FaultTreeNode("top", "top_event", "Top"),
+                FaultTreeNode("g1", "gate", "Top logic", gate_type="OR"),
+                FaultTreeNode("a", "basic_event", "A"),
+                FaultTreeNode("u", "undeveloped_event", "Unspecified cause"),
+            ],
+            edges=[
+                FaultTreeEdge("top", "g1"),
+                FaultTreeEdge("g1", "a"),
+                FaultTreeEdge("g1", "u"),
+            ],
+        )
+
+        cut_sets = compute_minimal_cut_sets(project)
+
+        self.assertEqual(
+            [cut_set.event_labels for cut_set in cut_sets],
+            [("A",), ("Unspecified cause",)],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

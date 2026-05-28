@@ -7,10 +7,10 @@ Backup protection failure = BASIC(1.5e-6)`;
 
 const emptyTextModel = `Top event = BASIC(0)`;
 const analysisApiUrl = "http://localhost:8000/api/analyze/minimal-cut-sets";
+const bddApiUrl = "http://localhost:8000/api/analyze/bdd";
 
 let projectName = "Generic Fault Tree Project";
 let selectedNodeId = "top";
-let selectedTool = "select";
 let activeBuilderMode = "graphical";
 let nodeSequence = 10;
 let model = createSampleModel();
@@ -41,6 +41,10 @@ const qualitativeTableBody = document.querySelector("[data-result-panel='qualita
 const metricMissionTime = document.querySelector("#metric-mission-time");
 const metricTopProbability = document.querySelector("#metric-top-probability");
 const metricVariableCount = document.querySelector("#metric-variable-count");
+const metricBddOrdering = document.querySelector("#metric-bdd-ordering");
+const metricBddNodes = document.querySelector("#metric-bdd-nodes");
+const metricBddProbability = document.querySelector("#metric-bdd-probability");
+const metricBddVariableOrder = document.querySelector("#metric-bdd-variable-order");
 const shortcutsModal = document.querySelector("#shortcuts-modal");
 const showShortcutsButton = document.querySelector("#show-shortcuts");
 const closeShortcutsButton = document.querySelector("#close-shortcuts");
@@ -166,6 +170,10 @@ function nodeKindLabel(node) {
     return "Intermediate event";
   }
 
+  if (node.kind === "undeveloped_event") {
+    return "Undeveloped event";
+  }
+
   return "Basic event";
 }
 
@@ -176,6 +184,9 @@ function nodeKindValue(node) {
   if (node.kind === "intermediate_event") {
     return "intermediate_event";
   }
+  if (node.kind === "undeveloped_event") {
+    return "undeveloped_event";
+  }
   return "basic_event";
 }
 
@@ -185,6 +196,16 @@ function nodeTemplateFromType(type, id, label, rate) {
       id,
       kind: "intermediate_event",
       label,
+      children: [],
+    };
+  }
+
+  if (type === "undeveloped_event") {
+    return {
+      id,
+      kind: "undeveloped_event",
+      label,
+      failureRate: rate,
       children: [],
     };
   }
@@ -215,6 +236,10 @@ function getNodeSize(node) {
 
   if (node.kind === "gate") {
     return { width: 82, height: 92 };
+  }
+
+  if (node.kind === "undeveloped_event") {
+    return { width: 140, height: 140 };
   }
 
   return { width: 188, height: 82 };
@@ -313,7 +338,7 @@ function renderCanvas() {
   visitTree(model.rootId, (node) => {
     const position = positions[node.id];
     const button = document.createElement("button");
-    button.className = `fault-node ${node.kind === "gate" ? "gate-node" : "event-node"} ${node.kind === "top_event" ? "top-event" : ""} ${node.kind === "basic_event" ? "basic-event" : ""} ${node.kind === "intermediate_event" ? "intermediate-event" : ""} ${node.gate === "AND" ? "and-gate" : ""} ${node.gate === "OR" ? "or-gate" : ""}`;
+    button.className = `fault-node ${node.kind === "gate" ? "gate-node" : "event-node"} ${node.kind === "top_event" ? "top-event" : ""} ${node.kind === "basic_event" ? "basic-event" : ""} ${node.kind === "undeveloped_event" ? "undeveloped-event" : ""} ${node.kind === "intermediate_event" ? "intermediate-event" : ""} ${node.gate === "AND" ? "and-gate" : ""} ${node.gate === "OR" ? "or-gate" : ""}`;
     button.dataset.nodeId = node.id;
     button.style.left = `${position.x}px`;
     button.style.top = `${position.y}px`;
@@ -375,20 +400,33 @@ function selectNode(nodeId) {
 }
 
 function setTool(tool) {
-  selectedTool = tool;
-  if (tool === "basic") {
-    childKindSelect.value = "basic_event";
+  const childKindByTool = {
+    basic: "basic_event",
+    undeveloped: "undeveloped_event",
+    and: "and_gate",
+    or: "or_gate",
+  };
+  const childKind = childKindByTool[tool];
+  if (!childKind) {
+    return;
   }
-  if (tool === "and") {
-    childKindSelect.value = "and_gate";
-  }
-  if (tool === "or") {
-    childKindSelect.value = "or_gate";
-  }
-  document.querySelectorAll("[data-tool]").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tool === tool);
-  });
+
+  childKindSelect.value = childKind;
+  syncToolButtons();
   statusLine.textContent = `Tool: ${tool}`;
+}
+
+function syncToolButtons() {
+  const toolByChildKind = {
+    basic_event: "basic",
+    undeveloped_event: "undeveloped",
+    and_gate: "and",
+    or_gate: "or",
+  };
+  const activeTool = toolByChildKind[childKindSelect.value];
+  document.querySelectorAll("[data-tool]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.tool === activeTool);
+  });
 }
 
 function setBuilderMode(mode) {
@@ -471,7 +509,7 @@ function createNewProject() {
   nodeSequence = 0;
   textArea.value = emptyTextModel;
   setProjectName("Untitled Fault Tree");
-  setTool("select");
+  setTool("basic");
   setBuilderMode("graphical");
   renderAll();
   clearAnalysisResults("Add gates and basic events to compute cut sets.");
@@ -504,7 +542,7 @@ function applyNodeProperties() {
 
   const requestedType = nodeKindSelect.value;
 
-  if (requestedType === "basic_event" && selected.children.length > 0) {
+  if ((requestedType === "basic_event" || requestedType === "undeveloped_event") && selected.children.length > 0) {
     statusLine.textContent = "Delete child nodes before converting this node to a basic event.";
     selectNode(selected.id);
     return;
@@ -513,8 +551,8 @@ function applyNodeProperties() {
   pushUndoSnapshot();
   selected.label = label;
 
-  if (requestedType === "basic_event") {
-    selected.kind = "basic_event";
+  if (requestedType === "basic_event" || requestedType === "undeveloped_event") {
+    selected.kind = requestedType;
     selected.failureRate = rate;
     selected.children = [];
     delete selected.gate;
@@ -535,23 +573,14 @@ function applyNodeProperties() {
 
 function addChildNode() {
   const parent = model.nodes[selectedNodeId];
-  const type = selectedTool === "and" ? "and_gate" : selectedTool === "or" ? "or_gate" : selectedTool === "basic" ? "basic_event" : "";
+  const type = childKindSelect.value;
   const rate = parseFailureRate(rateInput.value);
 
   if (!parent) {
     return;
   }
 
-  if (!type) {
-    if (parent.kind === "top_event" || parent.kind === "intermediate_event") {
-      statusLine.textContent = "Choose AND or OR before adding a child.";
-      return;
-    }
-    statusLine.textContent = "Choose BE, AND, or OR before adding a child.";
-    return;
-  }
-
-  if ((parent.kind === "top_event" || parent.kind === "intermediate_event") && type === "basic_event") {
+  if ((parent.kind === "top_event" || parent.kind === "intermediate_event") && (type === "basic_event" || type === "undeveloped_event")) {
     statusLine.textContent = "Choose AND or OR to place a gate below this event.";
     return;
   }
@@ -561,8 +590,8 @@ function addChildNode() {
     return;
   }
 
-  if (parent.kind === "basic_event") {
-    if (type === "basic_event" || type === "intermediate_event") {
+  if (parent.kind === "basic_event" || parent.kind === "undeveloped_event") {
+    if (type === "basic_event" || type === "undeveloped_event" || type === "intermediate_event") {
       statusLine.textContent = "Choose AND or OR to refine a basic event.";
       return;
     }
@@ -605,6 +634,9 @@ function defaultLabelForType(type) {
   }
   if (type === "or_gate") {
     return nextAvailableLabel("OR gate");
+  }
+  if (type === "undeveloped_event") {
+    return nextAvailableLabel("Undeveloped event");
   }
   return nextAvailableLabel("Basic event");
 }
@@ -783,6 +815,12 @@ function handleKeyboardShortcut(event) {
     return;
   }
 
+  if (key === "u") {
+    event.preventDefault();
+    setTool("undeveloped");
+    return;
+  }
+
   if (key === "c") {
     event.preventDefault();
     addChildNode();
@@ -851,7 +889,7 @@ function parseTextModel() {
   const definitions = lines.map((line, index) => {
     const parts = line.split("=");
     if (parts.length !== 2) {
-      throw new Error(`Line ${index + 1}: use "Event = OR(...)", "Event = A ^ B", or "Event = BASIC(rate)".`);
+      throw new Error(`Line ${index + 1}: use "Event = OR(...)", "Event = A ^ B", "Event = BASIC(probability)", or "Event = UNDEVELOPED(probability)".`);
     }
     const label = parts[0].trim();
     if (!label) {
@@ -921,7 +959,7 @@ function parseTextModel() {
       return;
     }
 
-    node.kind = "basic_event";
+    node.kind = definition.expression.type === "undeveloped" ? "undeveloped_event" : "basic_event";
     node.children = [];
     node.failureRate = definition.expression.failureRate;
     delete node.gate;
@@ -953,6 +991,14 @@ function parseExpression(expression, lineNumber) {
     };
   }
 
+  const undevelopedMatch = expression.match(/^UNDEVELOPED\((.*)\)$/i);
+  if (undevelopedMatch) {
+    return {
+      type: "undeveloped",
+      failureRate: parseStrictFailureRate(undevelopedMatch[1], lineNumber),
+    };
+  }
+
   const infixAnd = splitInfixExpression(expression, "^");
   if (infixAnd.length > 1) {
     return {
@@ -971,7 +1017,7 @@ function parseExpression(expression, lineNumber) {
     };
   }
 
-  throw new Error(`Line ${lineNumber}: expression must be AND(...), OR(...), A ^ B, A | B, or BASIC(rate).`);
+  throw new Error(`Line ${lineNumber}: expression must be AND(...), OR(...), A ^ B, A | B, BASIC(probability), or UNDEVELOPED(probability).`);
 }
 
 function splitInfixExpression(expression, operator) {
@@ -1022,6 +1068,10 @@ function serializeTextModel() {
     }
     if (node.kind === "gate") {
       lines.push(`${node.label} = ${node.gate}(${node.children.map((childId) => model.nodes[childId]?.label).filter(Boolean).join(", ")})`);
+      return;
+    }
+    if (node.kind === "undeveloped_event") {
+      lines.push(`${node.label} = UNDEVELOPED(${node.failureRate ?? 0})`);
       return;
     }
     lines.push(`${node.label} = BASIC(${node.failureRate ?? 0})`);
@@ -1094,7 +1144,7 @@ function modelToSbe() {
 
   const eventLines = [];
   const emittedEvents = new Set();
-  getBasicEventNodes().forEach((node) => {
+  getLeafEventNodes().forEach((node) => {
     const eventName = identifiers.get(node.id);
     if (emittedEvents.has(eventName)) {
       return;
@@ -1233,7 +1283,7 @@ function modelToProjectJson() {
       if (node.kind === "gate") {
         payload.gateType = node.gate;
       }
-      if (node.kind === "basic_event") {
+      if (node.kind === "basic_event" || node.kind === "undeveloped_event") {
         payload.probability = node.failureRate ?? 0;
       }
       return payload;
@@ -1473,7 +1523,9 @@ function loadProjectFromJson(project) {
   selectedNodeId = model.rootId;
   updateNodeSequence();
   setProjectName(projectName);
-  bddOrderingSelect.value = project.analysis?.variableOrdering || "topological";
+  bddOrderingSelect.value = ["topological", "alphabetical", "infix"].includes(project.analysis?.variableOrdering)
+    ? project.analysis.variableOrdering
+    : "topological";
   syncTextFromGraph();
   setBuilderMode("graphical");
   renderAll();
@@ -1519,6 +1571,16 @@ function normalizeImportedNode(node) {
     };
   }
 
+  if (node.type === "undeveloped_event") {
+    return {
+      id: node.id,
+      kind: "undeveloped_event",
+      label: node.label,
+      failureRate: Number(node.failureRate ?? node.probability ?? 0),
+      children: [],
+    };
+  }
+
   throw new Error(`Invalid FAUTree JSON: unsupported node type "${node.type}".`);
 }
 
@@ -1528,7 +1590,7 @@ function computeCutSets(nodeId) {
     return [];
   }
 
-  if (node.kind === "basic_event") {
+  if (node.kind === "basic_event" || node.kind === "undeveloped_event") {
     return [[node.label]];
   }
 
@@ -1572,7 +1634,11 @@ function clearAnalysisResults(message) {
   `;
   metricMissionTime.textContent = "Rare-event approximation";
   metricTopProbability.textContent = "pending";
-  metricVariableCount.textContent = String(Object.values(model.nodes).filter((node) => node.kind === "basic_event").length);
+  metricVariableCount.textContent = String(getLeafEventNodes().length);
+  metricBddOrdering.textContent = bddOrderingSelect.value;
+  metricBddNodes.textContent = "pending";
+  metricBddProbability.textContent = "pending";
+  metricBddVariableOrder.textContent = "pending";
   clearAnalysisSummary();
 }
 
@@ -1594,6 +1660,7 @@ async function runAnalysis() {
   statusLine.textContent = "Sending model to Python backend...";
   const project = modelToProjectJson();
   let backendResult;
+  let bddResult;
   const analysisStart = performance.now();
   try {
     const response = await fetch(analysisApiUrl, {
@@ -1606,6 +1673,17 @@ async function runAnalysis() {
     backendResult = await response.json();
     if (!response.ok) {
       throw new Error(backendResult.detail || backendResult.error || "Backend analysis failed.");
+    }
+    const bddResponse = await fetch(bddApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(project),
+    });
+    bddResult = await bddResponse.json();
+    if (!bddResponse.ok) {
+      throw new Error(bddResult.detail || bddResult.error || "BDD analysis failed.");
     }
   } catch (error) {
     clearAnalysisResults(`Python backend is not available: ${error.message}`);
@@ -1640,8 +1718,9 @@ async function runAnalysis() {
 
   metricMissionTime.textContent = "Rare-event approximation";
   metricTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
-  metricVariableCount.textContent = String(Object.values(model.nodes).filter((node) => node.kind === "basic_event").length);
-  renderAnalysisSummary(cutSets, topProbability, analysisDuration);
+  metricVariableCount.textContent = String(getLeafEventNodes().length);
+  renderBddResults(bddResult?.bdd);
+  renderAnalysisSummary(cutSets, topProbability, analysisDuration, bddResult?.bdd);
   statusLine.textContent = `Backend analysis refreshed: ${backendResult.count ?? cutSets.length} minimal cut sets.`;
 }
 
@@ -1653,13 +1732,30 @@ function clearAnalysisSummary() {
   summaryTopProbability.textContent = "pending";
   summaryDominantCutSet.textContent = "pending";
   summaryAnalysisTime.textContent = "pending";
-  summaryBasicEvents.textContent = String(getBasicEventNodes().length);
+  summaryBasicEvents.textContent = String(getLeafEventNodes().length);
   summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
   summaryAnalysisEngine.textContent = "Python backend";
   summaryBddNodes.textContent = "pending";
 }
 
-function renderAnalysisSummary(cutSets, topProbability, analysisDuration) {
+function renderBddResults(bdd) {
+  if (!bdd) {
+    metricBddOrdering.textContent = bddOrderingSelect.value;
+    metricBddNodes.textContent = "pending";
+    metricBddProbability.textContent = "pending";
+    metricBddVariableOrder.textContent = "pending";
+    summaryBddNodes.textContent = "pending";
+    return;
+  }
+
+  metricBddOrdering.textContent = bdd.ordering;
+  metricBddNodes.textContent = String(bdd.nodeCount);
+  metricBddProbability.textContent = formatNumber(bdd.exactProbability);
+  metricBddVariableOrder.textContent = (bdd.variableOrder || []).join(" < ") || "none";
+  summaryBddNodes.textContent = String(bdd.nodeCount);
+}
+
+function renderAnalysisSummary(cutSets, topProbability, analysisDuration, bdd) {
   const orders = cutSets.map((cutSet) => cutSet.order || 0).filter((order) => order > 0);
   const singlePointFailures = cutSets.filter((cutSet) => cutSet.order === 1).length;
   const dominant = findDominantCutSet(cutSets);
@@ -1671,10 +1767,10 @@ function renderAnalysisSummary(cutSets, topProbability, analysisDuration) {
   summaryTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
   summaryDominantCutSet.textContent = dominant ? `{ ${dominant.events.join(", ")} }` : "none";
   summaryAnalysisTime.textContent = `${Math.max(1, Math.round(analysisDuration))} ms`;
-  summaryBasicEvents.textContent = String(getBasicEventNodes().length);
+  summaryBasicEvents.textContent = String(getLeafEventNodes().length);
   summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
   summaryAnalysisEngine.textContent = "Python backend";
-  summaryBddNodes.textContent = "pending";
+  summaryBddNodes.textContent = bdd ? String(bdd.nodeCount) : "pending";
 }
 
 function findDominantCutSet(cutSets) {
@@ -1690,9 +1786,13 @@ function getBasicEventNodes() {
   return Object.values(model.nodes).filter((node) => node.kind === "basic_event");
 }
 
+function getLeafEventNodes() {
+  return Object.values(model.nodes).filter((node) => node.kind === "basic_event" || node.kind === "undeveloped_event");
+}
+
 function getRepeatedBasicEventLabels() {
   const counts = new Map();
-  getBasicEventNodes().forEach((node) => {
+  getLeafEventNodes().forEach((node) => {
     counts.set(node.label, (counts.get(node.label) || 0) + 1);
   });
   return [...counts.entries()].filter(([, count]) => count > 1).map(([label]) => label);
@@ -1750,7 +1850,7 @@ function getModelValidationIssues() {
 
 function getRepeatedEventRateIssues() {
   const eventsByLabel = new Map();
-  getBasicEventNodes().forEach((node) => {
+  getLeafEventNodes().forEach((node) => {
     const key = node.label.trim();
     if (!eventsByLabel.has(key)) {
       eventsByLabel.set(key, []);
@@ -1776,7 +1876,7 @@ function getRepeatedEventRateIssues() {
 }
 
 function probabilityForLabel(label) {
-  const event = Object.values(model.nodes).find((node) => node.kind === "basic_event" && node.label === label);
+  const event = Object.values(model.nodes).find((node) => (node.kind === "basic_event" || node.kind === "undeveloped_event") && node.label === label);
   return event?.failureRate || 0;
 }
 
@@ -1841,6 +1941,7 @@ function safeFilename(value) {
 document.querySelectorAll("[data-tool]").forEach((button) => {
   button.addEventListener("click", () => setTool(button.dataset.tool));
 });
+childKindSelect.addEventListener("change", syncToolButtons);
 
 document.querySelectorAll("[data-builder-mode]").forEach((button) => {
   button.addEventListener("click", () => setBuilderMode(button.dataset.builderMode));
@@ -1910,5 +2011,6 @@ document.querySelector("#reset-text-model").addEventListener("click", () => {
 document.querySelector("#run-analysis").addEventListener("click", runAnalysis);
 
 setProjectName(projectName);
+syncToolButtons();
 renderAll();
 runAnalysis();
