@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "0.1.0",
+  "project": {
+    "id": "xfta-custom-probability-tree",
+    "name": "XFTA Custom Probability Tree",
+    "description": "Converted from XFTA-style gate/basic-event text for FAUTree testing.",
+    "createdBy": "FAUTree"
+  },
+  "analysis": {
+    "quantification": "rare-event-approximation",
+    "variableOrdering": "topological"
+  },
+  "nodes": [
+    { "id": "top", "type": "top_event", "label": "top" },
+    { "id": "root_gate", "type": "gate", "label": "top logic", "gateType": "OR" },
+    { "id": "g1", "type": "gate", "label": "g1", "gateType": "OR" },
+    { "id": "g2", "type": "gate", "label": "g2", "gateType": "OR" },
+    { "id": "g3", "type": "gate", "label": "g3", "gateType": "OR" },
+    { "id": "g4", "type": "gate", "label": "g4", "gateType": "OR" },
+    { "id": "g5", "type": "gate", "label": "g5", "gateType": "OR" },
+    { "id": "g6", "type": "gate", "label": "g6", "gateType": "OR" },
+    { "id": "g7", "type": "gate", "label": "g7", "gateType": "AND" },
+
+    { "id": "eB", "type": "basic_event", "label": "B", "probability": 0.00003 },
+    { "id": "eD", "type": "basic_event", "label": "D", "probability": 0.00003 },
+    { "id": "eF", "type": "basic_event", "label": "F", "probability": 0.000001 },
+    { "id": "eH", "type": "basic_event", "label": "H", "probability": 0.000003 },
+    { "id": "eM", "type": "basic_event", "label": "M", "probability": 0.000003 },
+    { "id": "eN", "type": "basic_event", "label": "N", "probability": 0.000003 },
+    { "id": "eO", "type": "basic_event", "label": "O", "probability": 0.000003 },
+    { "id": "eP", "type": "basic_event", "label": "P", "probability": 0.000003 },
+    { "id": "eQ", "type": "basic_event", "label": "Q", "probability": 0.000001 },
+    { "id": "eR", "type": "basic_event", "label": "R", "probability": 0.000001 },
+    { "id": "eS", "type": "basic_event", "label": "S", "probability": 0.000001 },
+    { "id": "eT", "type": "basic_event", "label": "T", "probability": 0.000001 },
+    { "id": "eU", "type": "basic_event", "label": "U", "probability": 0.000001 },
+    { "id": "eV", "type": "basic_event", "label": "V", "probability": 0.000001 },
+    { "id": "eW", "type": "basic_event", "label": "W", "probability": 0.000002 },
+    { "id": "eX", "type": "basic_event", "label": "X", "probability": 0.000002 },
+    { "id": "eY", "type": "basic_event", "label": "Y", "probability": 0.000003 },
+    { "id": "eZV1", "type": "basic_event", "label": "ZV1", "probability": 0.000003 }
+  ],
+  "edges": [
+    { "source": "top", "target": "root_gate" },
+
+    { "source": "root_gate", "target": "eB" },
+    { "source": "root_gate", "target": "g1" },
+    { "source": "root_gate", "target": "eD" },
+
+    { "source": "g1", "target": "g2" },
+    { "source": "g1", "target": "eF" },
+    { "source": "g1", "target": "g3" },
+    { "source": "g1", "target": "eH" },
+    { "source": "g1", "target": "g4" },
+    { "source": "g1", "target": "g5" },
+
+    { "source": "g2", "target": "g6" },
+    { "source": "g2", "target": "g7" },
+
+    { "source": "g3", "target": "eM" },
+    { "source": "g3", "target": "eN" },
+    { "source": "g3", "target": "eO" },
+    { "source": "g3", "target": "eP" },
+
+    { "source": "g4", "target": "eQ" },
+    { "source": "g4", "target": "eR" },
+    { "source": "g4", "target": "eS" },
+
+    { "source": "g5", "target": "eT" },
+    { "source": "g5", "target": "eU" },
+    { "source": "g5", "target": "eV" },
+
+    { "source": "g6", "target": "eW" },
+    { "source": "g6", "target": "eX" },
+
+    { "source": "g7", "target": "eY" },
+    { "source": "g7", "target": "eZV1" }
+  ]
+}

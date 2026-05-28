@@ -36,8 +36,6 @@ const nodeKindSelect = document.querySelector("#node-kind-select");
 const rateInput = document.querySelector("#node-rate-input");
 const childKindSelect = document.querySelector("#child-kind-select");
 const textArea = document.querySelector("#fault-tree-text");
-const missionTimeInput = document.querySelector("#mission-time-input");
-const timeUnitSelect = document.querySelector("#time-unit-select");
 const bddOrderingSelect = document.querySelector("#bdd-ordering-select");
 const qualitativeTableBody = document.querySelector("[data-result-panel='qualitative'] tbody");
 const metricMissionTime = document.querySelector("#metric-mission-time");
@@ -46,6 +44,13 @@ const metricVariableCount = document.querySelector("#metric-variable-count");
 const shortcutsModal = document.querySelector("#shortcuts-modal");
 const showShortcutsButton = document.querySelector("#show-shortcuts");
 const closeShortcutsButton = document.querySelector("#close-shortcuts");
+const exportModal = document.querySelector("#export-modal");
+const closeExportButton = document.querySelector("#close-export");
+const cancelExportButton = document.querySelector("#cancel-export");
+const confirmExportButton = document.querySelector("#confirm-export");
+const exportFilenameInput = document.querySelector("#export-filename-input");
+const exportTypeSelect = document.querySelector("#export-type-select");
+const exportExtensionPreview = document.querySelector("#export-extension-preview");
 const summaryCutSetCount = document.querySelector("#summary-cut-set-count");
 const summaryMinOrder = document.querySelector("#summary-min-order");
 const summarySinglePoints = document.querySelector("#summary-single-points");
@@ -319,7 +324,7 @@ function renderCanvas() {
     if (node.kind === "gate") {
       button.innerHTML = createGateSymbol(node.gate);
     } else {
-      const rate = node.failureRate ? `<small>lambda ${formatNumber(node.failureRate)} / h</small>` : "";
+      const rate = node.failureRate ? `<small>p ${formatNumber(node.failureRate)}</small>` : "";
       button.innerHTML = `
         <span class="node-kind">${nodeKindLabel(node)}</span>
         <strong>${escapeHtml(node.label)}</strong>
@@ -358,12 +363,12 @@ function selectNode(nodeId) {
   labelInput.value = selected.label;
   nodeKindSelect.value = nodeKindValue(selected);
   nodeKindSelect.disabled = selected.kind === "top_event";
-  rateInput.value = selected.failureRate ? String(selected.failureRate) : "3e-6";
+  rateInput.value = selected.failureRate ? String(selected.failureRate) : "0.001";
   rateInput.disabled = false;
   nodeName.textContent = selected.label;
   nodeType.textContent = nodeKindLabel(selected);
   nodeGate.textContent = selected.gate || "None";
-  nodeRate.textContent = selected.failureRate ? `${formatNumber(selected.failureRate)} / h` : "Not assigned";
+  nodeRate.textContent = selected.failureRate ? formatNumber(selected.failureRate) : "Not assigned";
   statusLine.textContent = `Selected: ${selected.label}`;
   renderCanvas();
   renderTreeList();
@@ -414,8 +419,6 @@ function createHistorySnapshot() {
     selectedNodeId,
     projectName,
     nodeSequence,
-    missionTime: missionTimeInput.value,
-    timeUnit: timeUnitSelect.value,
     bddOrdering: bddOrderingSelect.value,
   };
 }
@@ -433,8 +436,6 @@ function restoreHistorySnapshot(snapshot, message) {
   selectedNodeId = snapshot.selectedNodeId;
   projectName = snapshot.projectName;
   nodeSequence = snapshot.nodeSequence;
-  missionTimeInput.value = snapshot.missionTime;
-  timeUnitSelect.value = snapshot.timeUnit;
   bddOrderingSelect.value = snapshot.bddOrdering;
   setProjectName(projectName);
   syncTextFromGraph();
@@ -688,6 +689,23 @@ function closeShortcutsModal() {
   showShortcutsButton.focus();
 }
 
+function openExportModal() {
+  exportFilenameInput.value = safeFilename(projectName);
+  exportTypeSelect.value = "json";
+  updateExportExtensionPreview();
+  exportModal.hidden = false;
+  exportFilenameInput.focus();
+}
+
+function closeExportModal() {
+  exportModal.hidden = true;
+  document.querySelector("#export-project").focus();
+}
+
+function updateExportExtensionPreview() {
+  exportExtensionPreview.textContent = exportTypeSelect.value === "sbe" ? ".sbe" : ".json";
+}
+
 function isTypingTarget(target) {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName);
 }
@@ -700,6 +718,12 @@ function handleKeyboardShortcut(event) {
   if (key === "escape" && !shortcutsModal.hidden) {
     event.preventDefault();
     closeShortcutsModal();
+    return;
+  }
+
+  if (key === "escape" && !exportModal.hidden) {
+    event.preventDefault();
+    closeExportModal();
     return;
   }
 
@@ -1025,17 +1049,165 @@ function serializeChildrenAsGate(node) {
   return `OR(${node.children.map((childId) => model.nodes[childId]?.label).filter(Boolean).join(", ")})`;
 }
 
+function modelToSbe() {
+  const root = model.nodes[model.rootId];
+  if (!root || root.children.length !== 1 || model.nodes[root.children[0]]?.kind !== "gate") {
+    throw new Error("Export SBE needs one AND or OR gate below the top event.");
+  }
+
+  const identifiers = createSbeIdentifiers();
+  const emittedGates = new Set();
+  const gateLines = [];
+
+  function emitGate(nodeId, exportName) {
+    const node = model.nodes[nodeId];
+    if (!node || node.kind !== "gate" || emittedGates.has(nodeId)) {
+      return;
+    }
+
+    emittedGates.add(nodeId);
+    const childGateIds = [];
+    const childNames = node.children.map((childId) => {
+      const child = model.nodes[childId];
+      if (!child) {
+        throw new Error("Export SBE failed: the tree contains a missing child node.");
+      }
+      if (child.kind === "intermediate_event") {
+        if (child.children.length !== 1 || model.nodes[child.children[0]]?.kind !== "gate") {
+          throw new Error(`Export SBE needs "${child.label}" to contain exactly one gate.`);
+        }
+        childGateIds.push({ id: child.children[0], name: identifiers.get(child.id) });
+        return identifiers.get(child.id);
+      }
+      if (child.kind === "gate") {
+        childGateIds.push({ id: child.id, name: identifiers.get(child.id) });
+      }
+      return identifiers.get(child.id);
+    });
+
+    const operator = ` ${node.gate.toLowerCase()} `;
+    gateLines.push(`gate ${exportName} = ${childNames.join(operator)};`);
+    childGateIds.forEach((childGate) => emitGate(childGate.id, childGate.name));
+  }
+
+  emitGate(root.children[0], "top");
+
+  const eventLines = [];
+  const emittedEvents = new Set();
+  getBasicEventNodes().forEach((node) => {
+    const eventName = identifiers.get(node.id);
+    if (emittedEvents.has(eventName)) {
+      return;
+    }
+    emittedEvents.add(eventName);
+    eventLines.push(`basic-event ${eventName} = ${formatSbeNumber(node.failureRate ?? 0)};`);
+  });
+
+  return `${gateLines.join("\n")}\n${eventLines.join("\n")}\n`;
+}
+
+function createSbeIdentifiers() {
+  const identifiers = new Map();
+  const used = new Set(["top"]);
+
+  Object.values(model.nodes).forEach((node) => {
+    if (node.kind === "top_event") {
+      identifiers.set(node.id, "top");
+      return;
+    }
+
+    const preferred = sbeIdentifierFromLabel(node.label || node.id);
+    let identifier = preferred;
+    let index = 1;
+    while (used.has(identifier)) {
+      identifier = `${preferred}_${index}`;
+      index += 1;
+    }
+    used.add(identifier);
+    identifiers.set(node.id, identifier);
+  });
+
+  return identifiers;
+}
+
+function sbeIdentifierFromLabel(label) {
+  const cleaned = String(label)
+    .trim()
+    .replace(/[^A-Za-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const identifier = cleaned || "event";
+  return /^[A-Za-z_]/.test(identifier) ? identifier : `e_${identifier}`;
+}
+
+function formatSbeNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return "0";
+  }
+  return Number.isInteger(number) ? String(number) : String(number);
+}
+
 function exportProject() {
+  openExportModal();
+}
+
+async function confirmProjectExport() {
+  const filenameBase = safeFilename(exportFilenameInput.value || projectName);
+  const exportType = exportTypeSelect.value;
+
+  if (exportType === "sbe") {
+    await exportSbeProject(filenameBase);
+    return;
+  }
+
+  await exportJsonProject(filenameBase);
+}
+
+async function exportJsonProject(filenameBase = safeFilename(projectName)) {
   const project = modelToProjectJson();
-  const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+  await saveTextFile({
+    filename: `${filenameBase}.json`,
+    content: JSON.stringify(project, null, 2),
+    type: "application/json",
+    description: "FAUTree JSON",
+    extension: ".json",
+  });
+  closeExportModal();
+  statusLine.textContent = "Project exported as FAUTree JSON.";
+}
+
+async function exportSbeProject(filenameBase = safeFilename(projectName)) {
+  try {
+    const sbeText = modelToSbe();
+    await saveTextFile({
+      filename: `${filenameBase}.sbe`,
+      content: sbeText,
+      type: "text/plain",
+      description: "XFTA SBE",
+      extension: ".sbe",
+    });
+    closeExportModal();
+    statusLine.textContent = "Project exported as XFTA SBE.";
+  } catch (error) {
+    if (error.name !== "AbortError") {
+      statusLine.textContent = error.message;
+    }
+  }
+}
+
+async function saveTextFile({ filename, content, type }) {
+  downloadTextFile(filename, content, type);
+}
+
+function downloadTextFile(filename, content, type) {
+  const blob = new Blob([content], { type });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `${safeFilename(projectName)}.fautree.json`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(link.href);
-  statusLine.textContent = "Project exported as FAUTree JSON.";
 }
 
 function modelToProjectJson() {
@@ -1048,8 +1220,7 @@ function modelToProjectJson() {
       createdBy: "FAUTree",
     },
     analysis: {
-      missionTime: Number(missionTimeInput.value) || 0,
-      timeUnit: timeUnitSelect.value,
+      quantification: "rare-event-approximation",
       variableOrdering: bddOrderingSelect.value,
     },
     nodes: Object.values(model.nodes).map((node) => {
@@ -1063,7 +1234,7 @@ function modelToProjectJson() {
         payload.gateType = node.gate;
       }
       if (node.kind === "basic_event") {
-        payload.failureRate = node.failureRate ?? 0;
+        payload.probability = node.failureRate ?? 0;
       }
       return payload;
     }),
@@ -1092,9 +1263,15 @@ function importProjectFile(file) {
   const reader = new FileReader();
   reader.addEventListener("load", () => {
     try {
-      const project = JSON.parse(String(reader.result));
-      loadProjectFromJson(project);
-      statusLine.textContent = `Imported: ${projectName}`;
+      const content = String(reader.result);
+      if (isSbeFile(file, content)) {
+        loadModelFromSbe(content, file.name);
+        statusLine.textContent = `Imported XFTA SBE: ${projectName}`;
+      } else {
+        const project = JSON.parse(content);
+        loadProjectFromJson(project);
+        statusLine.textContent = `Imported: ${projectName}`;
+      }
     } catch (error) {
       statusLine.textContent = error.message;
     } finally {
@@ -1105,6 +1282,160 @@ function importProjectFile(file) {
     statusLine.textContent = "Could not read the selected file.";
   });
   reader.readAsText(file);
+}
+
+function isSbeFile(file, content) {
+  return file.name.toLowerCase().endsWith(".sbe") || /^\s*(gate|basic-event)\s+/im.test(content);
+}
+
+function loadModelFromSbe(content, filename) {
+  const imported = parseSbeModel(content);
+  pushUndoSnapshot();
+  model = imported;
+  selectedNodeId = model.rootId;
+  updateNodeSequence();
+  setProjectName(filename ? filename.replace(/\.sbe$/i, "") : "Imported XFTA SBE");
+  syncTextFromGraph();
+  setBuilderMode("graphical");
+  renderAll();
+  runAnalysis();
+}
+
+function parseSbeModel(content) {
+  const gateDefinitions = new Map();
+  const basicDefinitions = new Map();
+  const lines = content.split(/\r?\n/);
+
+  lines.forEach((rawLine, index) => {
+    const line = rawLine
+      .replace(/\/\/.*$/, "")
+      .replace(/#.*$/, "")
+      .trim();
+
+    if (!line) {
+      return;
+    }
+
+    const gateMatch = line.match(/^gate\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*;?$/i);
+    if (gateMatch) {
+      const name = gateMatch[1];
+      if (gateDefinitions.has(name)) {
+        throw new Error(`Line ${index + 1}: duplicate gate "${name}".`);
+      }
+      gateDefinitions.set(name, parseSbeGateExpression(gateMatch[2], index + 1));
+      return;
+    }
+
+    const basicMatch = line.match(/^basic-event\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*;?$/i);
+    if (basicMatch) {
+      const name = basicMatch[1];
+      if (basicDefinitions.has(name)) {
+        throw new Error(`Line ${index + 1}: duplicate basic event "${name}".`);
+      }
+      basicDefinitions.set(name, parseStrictFailureRate(basicMatch[2], index + 1));
+      return;
+    }
+
+    throw new Error(`Line ${index + 1}: unsupported SBE syntax.`);
+  });
+
+  if (!gateDefinitions.has("top")) {
+    throw new Error('Invalid SBE: a "gate top = ..." definition is required.');
+  }
+
+  const nodes = {
+    top: {
+      id: "top",
+      kind: "top_event",
+      label: "top",
+      children: ["root_gate"],
+    },
+  };
+
+  const gateIdByName = new Map();
+  const basicIdByName = new Map();
+  gateDefinitions.forEach((definition, name) => {
+    const id = name === "top" ? "root_gate" : uniqueImportedId(`g_${name}`, nodes);
+    gateIdByName.set(name, id);
+    nodes[id] = {
+      id,
+      kind: "gate",
+      gate: definition.gate,
+      label: name === "top" ? "top logic" : name,
+      children: [],
+    };
+  });
+
+  basicDefinitions.forEach((probability, name) => {
+    const id = uniqueImportedId(`e_${name}`, nodes);
+    basicIdByName.set(name, id);
+    nodes[id] = {
+      id,
+      kind: "basic_event",
+      label: name,
+      failureRate: probability,
+      children: [],
+    };
+  });
+
+  gateDefinitions.forEach((definition, name) => {
+    const gateNode = nodes[gateIdByName.get(name)];
+    gateNode.children = definition.children.map((childName) => {
+      if (gateIdByName.has(childName)) {
+        return gateIdByName.get(childName);
+      }
+      if (basicIdByName.has(childName)) {
+        return basicIdByName.get(childName);
+      }
+      throw new Error(`Invalid SBE: "${name}" references undefined event "${childName}".`);
+    });
+  });
+
+  return {
+    rootId: "top",
+    nodes,
+  };
+}
+
+function parseSbeGateExpression(expression, lineNumber) {
+  const trimmed = expression.trim();
+  const operatorMatches = [...trimmed.matchAll(/\s+(and|or)\s+/gi)].map((match) => match[1].toUpperCase());
+  const uniqueOperators = uniqueItems(operatorMatches);
+
+  if (uniqueOperators.length !== 1) {
+    throw new Error(`Line ${lineNumber}: gate expression must use only AND or only OR.`);
+  }
+
+  const children = trimmed
+    .split(new RegExp(`\\s+${uniqueOperators[0]}\\s+`, "i"))
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (children.length < 2) {
+    throw new Error(`Line ${lineNumber}: gate must have at least two inputs.`);
+  }
+
+  children.forEach((child) => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(child)) {
+      throw new Error(`Line ${lineNumber}: invalid event name "${child}".`);
+    }
+  });
+
+  return {
+    gate: uniqueOperators[0],
+    children,
+  };
+}
+
+function uniqueImportedId(candidate, nodes) {
+  const base = candidate.replace(/[^A-Za-z0-9_]/g, "_") || "node";
+  let id = base;
+  let index = 1;
+  while (nodes[id]) {
+    id = `${base}_${index}`;
+    index += 1;
+  }
+  return id;
 }
 
 function loadProjectFromJson(project) {
@@ -1142,8 +1473,6 @@ function loadProjectFromJson(project) {
   selectedNodeId = model.rootId;
   updateNodeSequence();
   setProjectName(projectName);
-  missionTimeInput.value = project.analysis?.missionTime ?? 1000;
-  timeUnitSelect.value = project.analysis?.timeUnit || "hour";
   bddOrderingSelect.value = project.analysis?.variableOrdering || "topological";
   syncTextFromGraph();
   setBuilderMode("graphical");
@@ -1241,7 +1570,7 @@ function clearAnalysisResults(message) {
       <td colspan="3">${escapeHtml(message)}</td>
     </tr>
   `;
-  metricMissionTime.textContent = `${Number(missionTimeInput.value) || 0} h`;
+  metricMissionTime.textContent = "Rare-event approximation";
   metricTopProbability.textContent = "pending";
   metricVariableCount.textContent = String(Object.values(model.nodes).filter((node) => node.kind === "basic_event").length);
   clearAnalysisSummary();
@@ -1286,7 +1615,6 @@ async function runAnalysis() {
   const analysisDuration = performance.now() - analysisStart;
 
   const cutSets = backendResult.minimalCutSets || [];
-  const missionTime = Number(missionTimeInput.value) || 0;
   qualitativeTableBody.innerHTML = "";
 
   if (cutSets.length === 0) {
@@ -1307,10 +1635,10 @@ async function runAnalysis() {
   });
 
   const topProbability = cutSets.reduce((total, cutSet) => {
-    return total + (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label, missionTime), 1);
+    return total + (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label), 1);
   }, 0);
 
-  metricMissionTime.textContent = `${missionTime} h`;
+  metricMissionTime.textContent = "Rare-event approximation";
   metricTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
   metricVariableCount.textContent = String(Object.values(model.nodes).filter((node) => node.kind === "basic_event").length);
   renderAnalysisSummary(cutSets, topProbability, analysisDuration);
@@ -1350,11 +1678,10 @@ function renderAnalysisSummary(cutSets, topProbability, analysisDuration) {
 }
 
 function findDominantCutSet(cutSets) {
-  const missionTime = Number(missionTimeInput.value) || 0;
   return cutSets
     .map((cutSet) => ({
       ...cutSet,
-      probability: (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label, missionTime), 1),
+      probability: (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label), 1),
     }))
     .sort((left, right) => right.probability - left.probability)[0];
 }
@@ -1437,21 +1764,20 @@ function getRepeatedEventRateIssues() {
       return;
     }
 
-    const rates = new Set(events.map((event) => String(event.failureRate ?? 0)));
-    if (rates.size > 1) {
+    const probabilities = new Set(events.map((event) => String(event.failureRate ?? 0)));
+    if (probabilities.size > 1) {
       issues.push({
         nodeId: events[0].id,
-        message: `Repeated basic event "${label}" has inconsistent failure rates. Use the same failure rate or rename one event.`,
+        message: `Repeated basic event "${label}" has inconsistent probabilities. Use the same probability or rename one event.`,
       });
     }
   });
   return issues;
 }
 
-function probabilityForLabel(label, missionTime) {
+function probabilityForLabel(label) {
   const event = Object.values(model.nodes).find((node) => node.kind === "basic_event" && node.label === label);
-  const rate = event?.failureRate || 0;
-  return 1 - Math.exp(-rate * missionTime);
+  return event?.failureRate || 0;
 }
 
 function renderAll() {
@@ -1476,7 +1802,7 @@ function parseFailureRate(value) {
 function parseStrictFailureRate(value, lineNumber) {
   const parsed = Number(String(value).trim());
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`Line ${lineNumber}: failure rate must be a non-negative number.`);
+    throw new Error(`Line ${lineNumber}: probability must be a non-negative number.`);
   }
   return parsed;
 }
@@ -1549,6 +1875,20 @@ closeShortcutsButton.addEventListener("click", closeShortcutsModal);
 shortcutsModal.addEventListener("click", (event) => {
   if (event.target === shortcutsModal) {
     closeShortcutsModal();
+  }
+});
+closeExportButton.addEventListener("click", closeExportModal);
+cancelExportButton.addEventListener("click", closeExportModal);
+confirmExportButton.addEventListener("click", confirmProjectExport);
+exportTypeSelect.addEventListener("change", updateExportExtensionPreview);
+exportModal.addEventListener("click", (event) => {
+  if (event.target === exportModal) {
+    closeExportModal();
+  }
+});
+exportFilenameInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    confirmProjectExport();
   }
 });
 importProjectInput.addEventListener("change", (event) => importProjectFile(event.target.files[0]));

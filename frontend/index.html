@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FAUTree</title>
-    <link rel="stylesheet" href="./styles.css?v=20260527-responsive-polish">
+    <link rel="stylesheet" href="./styles.css?v=20260528-export-dialog-polish">
   </head>
   <body>
     <div class="app-shell">
@@ -25,7 +25,7 @@
         <div class="top-actions">
           <button class="quiet-button" id="import-project">Import</button>
           <button class="quiet-button" id="export-project">Export</button>
-          <input id="import-project-file" class="sr-only-input" type="file" accept=".json,.fautree,.fautree.json,application/json">
+          <input id="import-project-file" class="sr-only-input" type="file" accept=".json,.sbe">
           <button class="quiet-button" id="show-shortcuts" title="Show keyboard shortcuts">Shortcuts</button>
           <button class="primary-button" id="run-analysis" title="Run Analysis (Ctrl+Enter)">Run Analysis</button>
         </div>
@@ -88,8 +88,8 @@
             </select>
           </label>
           <label class="field">
-            <span>Failure rate</span>
-            <input id="node-rate-input" type="text" value="3e-6">
+            <span>Basic event probability</span>
+            <input id="node-rate-input" type="text" value="0.001">
           </label>
           <label class="field">
             <span>Child type</span>
@@ -165,7 +165,7 @@
               <dd id="node-gate">None</dd>
             </div>
             <div>
-              <dt>Failure rate</dt>
+              <dt>Probability</dt>
               <dd id="node-rate">Not assigned</dd>
             </div>
           </dl>
@@ -173,20 +173,8 @@
 
         <section class="panel-block">
           <div class="section-heading">
-            <span>Analysis Settings</span>
+            <span>BDD Settings</span>
           </div>
-          <label class="field">
-            <span>Mission time</span>
-            <input id="mission-time-input" type="number" value="1000" min="0">
-          </label>
-          <label class="field">
-            <span>Time unit</span>
-            <select id="time-unit-select">
-              <option>hour</option>
-              <option>year</option>
-              <option>cycle</option>
-            </select>
-          </label>
           <label class="field">
             <span>BDD ordering</span>
             <select id="bdd-ordering-select">
@@ -271,8 +259,8 @@
         <div class="result-panel" data-result-panel="quantitative">
           <div class="metric-grid">
             <article>
-              <span>Mission time</span>
-              <strong id="metric-mission-time">1000 h</strong>
+              <span>Quantification</span>
+              <strong id="metric-mission-time">Rare-event approximation</strong>
             </article>
             <article>
               <span>Top event probability</span>
@@ -326,6 +314,38 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260528-shortcut-help"></script>
+    <div class="modal-backdrop" id="export-modal" hidden>
+      <section class="modal-panel export-panel" role="dialog" aria-modal="true" aria-labelledby="export-title">
+        <div class="modal-header">
+          <div>
+            <h2 id="export-title">Export Project</h2>
+            <p>Save the current fault tree model.</p>
+          </div>
+          <button class="icon-button" id="close-export" title="Close export" aria-label="Close export">x</button>
+        </div>
+        <div class="modal-form">
+          <label class="field export-field">
+            <span>Filename</span>
+            <div class="filename-control">
+              <input id="export-filename-input" type="text">
+              <strong id="export-extension-preview">.json</strong>
+            </div>
+          </label>
+          <label class="field export-field">
+            <span>Save as type</span>
+            <select id="export-type-select">
+              <option value="json">FAUTree JSON (.json)</option>
+              <option value="sbe">XFTA SBE (.sbe)</option>
+            </select>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="quiet-button" id="cancel-export">Cancel</button>
+          <button class="primary-button" id="confirm-export">Export</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="./app.js?v=20260528-consistent-export-download"></script>
   </body>
 </html>

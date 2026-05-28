@@ -24,7 +24,7 @@
 
 ## Phase 4: Quantitative Analysis
 
-- Add failure rate and mission-time calculations.
+- Add probability/unavailability quantification and document the selected quantitative model.
 - Compute top event probability from cut sets.
 - Add exact probability through BDD evaluation.
 - Add result tables and sensitivity views.
@@ -41,4 +41,3 @@
 - Export PDF/HTML reports.
 - Include diagrams, assumptions, event tables, cut sets, probability results, and BDD metrics.
 - Add case-study templates for PROFIBUS, PROFINET, and product-line examples.
-

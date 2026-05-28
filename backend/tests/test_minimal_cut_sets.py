@@ -86,7 +86,7 @@ class MinimalCutSetTests(unittest.TestCase):
         )
         self.assertEqual([cut_set.order for cut_set in cut_sets], [2, 2])
 
-    def test_repeated_basic_event_labels_require_same_failure_rate(self) -> None:
+    def test_repeated_basic_event_labels_require_same_probability(self) -> None:
         project = FaultTreeProject(
             schema_version="0.1.0",
             project=ProjectMetadata(id="rates", name="Repeated event rates"),
@@ -105,10 +105,10 @@ class MinimalCutSetTests(unittest.TestCase):
         )
 
         self.assertIn(
-            'Repeated basic event "C" has inconsistent failure rates.',
+            'Repeated basic event "C" has inconsistent probabilities.',
             project.validate(),
         )
-        with self.assertRaisesRegex(ValueError, "inconsistent failure rates"):
+        with self.assertRaisesRegex(ValueError, "inconsistent probabilities"):
             compute_minimal_cut_sets(project)
 
 

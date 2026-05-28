@@ -25,10 +25,10 @@ class FaultTreeNode:
         }
         if self.gate_type is not None:
             payload["gateType"] = self.gate_type
-        if self.failure_rate is not None:
-            payload["failureRate"] = self.failure_rate
         if self.probability is not None:
             payload["probability"] = self.probability
+        elif self.failure_rate is not None:
+            payload["probability"] = self.failure_rate
         return payload
 
 
@@ -46,14 +46,12 @@ class FaultTreeEdge:
 
 @dataclass(frozen=True)
 class AnalysisSettings:
-    mission_time: float = 1000.0
-    time_unit: str = "hour"
+    quantification: str = "rare-event-approximation"
     variable_ordering: str = "topological"
 
-    def to_dict(self) -> dict[str, str | float]:
+    def to_dict(self) -> dict[str, str]:
         return {
-            "missionTime": self.mission_time,
-            "timeUnit": self.time_unit,
+            "quantification": self.quantification,
             "variableOrdering": self.variable_ordering,
         }
 
@@ -104,8 +102,7 @@ class FaultTreeProject:
                 created_by=project_payload.get("createdBy", "FAUTree"),
             ),
             analysis=AnalysisSettings(
-                mission_time=float(analysis_payload.get("missionTime", 1000.0)),
-                time_unit=analysis_payload.get("timeUnit", "hour"),
+                quantification=analysis_payload.get("quantification", "rare-event-approximation"),
                 variable_ordering=analysis_payload.get("variableOrdering", "topological"),
             ),
             nodes=[
@@ -115,7 +112,7 @@ class FaultTreeProject:
                     label=node["label"],
                     gate_type=node.get("gateType"),
                     failure_rate=node.get("failureRate"),
-                    probability=node.get("probability"),
+                    probability=node.get("probability", node.get("failureRate")),
                 )
                 for node in payload.get("nodes", [])
             ],
@@ -152,13 +149,13 @@ class FaultTreeProject:
         for node in self.nodes:
             if node.type != "basic_event":
                 continue
-            rate = float(node.failure_rate or 0)
+            rate = float(node.probability if node.probability is not None else node.failure_rate or 0)
             rates_by_basic_event_label.setdefault(node.label, set()).add(rate)
 
         for label, rates in rates_by_basic_event_label.items():
             if len(rates) > 1:
                 errors.append(
-                    f'Repeated basic event "{label}" has inconsistent failure rates.'
+                    f'Repeated basic event "{label}" has inconsistent probabilities.'
                 )
 
         return errors

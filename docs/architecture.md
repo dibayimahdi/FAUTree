@@ -8,7 +8,7 @@ The platform should support:
 
 - graphical fault tree modeling
 - qualitative analysis with minimal cut sets
-- quantitative analysis with event probabilities and failure rates
+- quantitative analysis with event probabilities/unavailabilities
 - BDD conversion and variable ordering experiments
 - product-line and variant-rich fault tree analysis
 - report export for papers, thesis chapters, and engineering documentation
@@ -80,4 +80,3 @@ Core entities:
 4. Use MOCUS/minimization for minimal cut sets.
 5. Use BDDs for exact probability and ordering comparison.
 6. Keep Monte Carlo as a separate module for stochastic and variant-rich cases.
-

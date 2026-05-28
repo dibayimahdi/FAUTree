@@ -7,8 +7,7 @@
     "createdBy": "FAUTree"
   },
   "analysis": {
-    "missionTime": 1000,
-    "timeUnit": "hour",
+    "quantification": "rare-event-approximation",
     "variableOrdering": "topological"
   },
   "nodes": [
@@ -27,7 +26,7 @@
       "id": "e1",
       "type": "basic_event",
       "label": "Power supply failure",
-      "failureRate": 0.000002
+      "probability": 0.000002
     },
     {
       "id": "g2",
@@ -39,19 +38,19 @@
       "id": "e2",
       "type": "basic_event",
       "label": "Primary protection failure",
-      "failureRate": 0.0000015
+      "probability": 0.0000015
     },
     {
       "id": "e3",
       "type": "basic_event",
       "label": "Backup protection failure",
-      "failureRate": 0.0000015
+      "probability": 0.0000015
     },
     {
       "id": "e4",
       "type": "basic_event",
       "label": "Control unit failure",
-      "failureRate": 0.000003
+      "probability": 0.000003
     }
   ],
   "edges": [

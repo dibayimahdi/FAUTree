@@ -18,8 +18,7 @@ def build_sample_project() -> FaultTreeProject:
             description="Starter example for the FAUTree shell.",
         ),
         analysis=AnalysisSettings(
-            mission_time=1000.0,
-            time_unit="hour",
+            quantification="rare-event-approximation",
             variable_ordering="topological",
         ),
         nodes=[

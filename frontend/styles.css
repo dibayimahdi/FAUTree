@@ -792,6 +792,12 @@ th {
   letter-spacing: 0;
 }
 
+.modal-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .shortcut-list {
   display: grid;
   gap: 0;
@@ -820,6 +826,70 @@ th {
   margin: 0;
   color: var(--muted);
   line-height: 1.35;
+}
+
+.modal-form {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: #f8f5ec;
+}
+
+.export-panel {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.export-panel .modal-header {
+  background: #fffdf9;
+}
+
+.export-panel .field {
+  margin-bottom: 0;
+}
+
+.export-field {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.export-field > span {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.filename-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.filename-control input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  font-size: 15px;
+}
+
+.filename-control strong {
+  display: inline-flex;
+  align-items: center;
+  min-width: 68px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
 }
 
 @media (max-width: 1180px) {
@@ -946,5 +1016,10 @@ th {
   .shortcut-list div {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .export-field {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
