@@ -24,6 +24,7 @@ class BDDAnalysisResult:
     node_count: int
     exact_probability: float
     root: int
+    graph: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -33,6 +34,7 @@ class BDDAnalysisResult:
             "nodeCount": self.node_count,
             "exactProbability": self.exact_probability,
             "root": self.root,
+            "graph": self.graph,
         }
 
 
@@ -111,9 +113,10 @@ class BDDManager:
 
 
 class BDDAnalyzer:
-    def __init__(self, project: FaultTreeProject, ordering: str) -> None:
+    def __init__(self, project: FaultTreeProject, ordering: str, custom_order: tuple[str, ...] = ()) -> None:
         self.project = project
         self.ordering = ordering
+        self.custom_order = custom_order
         self.nodes = {node.id: node for node in project.nodes}
         self.children: dict[str, list[str]] = {node.id: [] for node in project.nodes}
         self.basic_event_label_by_id: dict[str, str] = {}
@@ -140,6 +143,7 @@ class BDDAnalyzer:
             node_count=len(manager.nodes),
             exact_probability=probability,
             root=bdd_root,
+            graph=self._graph_payload(manager, bdd_root),
         )
 
     def _build_bdd(self, node_id: str, manager: BDDManager) -> int:
@@ -175,7 +179,25 @@ class BDDAnalyzer:
             return tuple(sorted(labels))
         if self.ordering == "infix":
             return tuple(self._basic_event_labels_in_infix_order())
+        if self.ordering == "custom":
+            return self._validated_custom_order(labels)
         return tuple(labels)
+
+    def _validated_custom_order(self, labels: list[str]) -> tuple[str, ...]:
+        expected = set(labels)
+        requested = list(self.custom_order)
+        if len(requested) != len(set(requested)):
+            raise ValueError("Custom BDD variable order contains duplicate variables.")
+        if set(requested) != expected:
+            missing = sorted(expected.difference(requested))
+            extra = sorted(set(requested).difference(expected))
+            details = []
+            if missing:
+                details.append(f"missing: {', '.join(missing)}")
+            if extra:
+                details.append(f"unknown: {', '.join(extra)}")
+            raise ValueError(f"Custom BDD variable order must contain each leaf event exactly once ({'; '.join(details)}).")
+        return tuple(requested)
 
     def _basic_event_labels_in_topological_order(self) -> list[str]:
         labels: list[str] = []
@@ -224,10 +246,75 @@ class BDDAnalyzer:
             raise ValueError(f"Node does not exist: {node_id}")
         return node
 
+    def _graph_payload(self, manager: BDDManager, root: int) -> dict | None:
+        if len(manager.nodes) > 80:
+            return None
 
-def compute_bdd_analysis(project: FaultTreeProject, ordering: str = "topological") -> BDDAnalysisResult:
-    if ordering == "custom":
-        ordering = "topological"
-    if ordering not in {"topological", "alphabetical", "infix"}:
+        reachable = self._reachable_bdd_ids(manager, root)
+        level_counts: dict[int, int] = {}
+        graph_nodes = []
+        for node_id in sorted(reachable, key=lambda item: (self._bdd_level(manager, item), item)):
+            level = self._bdd_level(manager, node_id)
+            index = level_counts.get(level, 0)
+            level_counts[level] = index + 1
+
+            if node_id == BDD_FALSE:
+                label = "0"
+                kind = "terminal"
+            elif node_id == BDD_TRUE:
+                label = "1"
+                kind = "terminal"
+            else:
+                label = manager.nodes[node_id].variable
+                kind = "decision"
+
+            graph_nodes.append(
+                {
+                    "id": node_id,
+                    "label": label,
+                    "kind": kind,
+                    "level": level,
+                    "index": index,
+                }
+            )
+
+        graph_edges = []
+        for node_id in sorted(reachable):
+            if node_id in {BDD_FALSE, BDD_TRUE}:
+                continue
+            node = manager.nodes[node_id]
+            graph_edges.append({"source": node_id, "target": node.low, "branch": "0"})
+            graph_edges.append({"source": node_id, "target": node.high, "branch": "1"})
+
+        return {
+            "root": root,
+            "nodes": graph_nodes,
+            "edges": graph_edges,
+        }
+
+    def _reachable_bdd_ids(self, manager: BDDManager, root: int) -> set[int]:
+        reachable: set[int] = set()
+
+        def visit(node_id: int) -> None:
+            if node_id in reachable:
+                return
+            reachable.add(node_id)
+            if node_id in {BDD_FALSE, BDD_TRUE}:
+                return
+            node = manager.nodes[node_id]
+            visit(node.low)
+            visit(node.high)
+
+        visit(root)
+        return reachable
+
+    def _bdd_level(self, manager: BDDManager, node_id: int) -> int:
+        if node_id in {BDD_FALSE, BDD_TRUE}:
+            return len(manager.variable_order)
+        return manager.variable_rank[manager.nodes[node_id].variable]
+
+
+def compute_bdd_analysis(project: FaultTreeProject, ordering: str = "topological", custom_order: tuple[str, ...] = ()) -> BDDAnalysisResult:
+    if ordering not in {"topological", "alphabetical", "infix", "custom"}:
         raise ValueError(f"Unsupported BDD ordering: {ordering}")
-    return BDDAnalyzer(project, ordering).compute()
+    return BDDAnalyzer(project, ordering, custom_order).compute()

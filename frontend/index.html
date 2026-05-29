@@ -127,12 +127,18 @@
           </div>
         </div>
 
-        <section class="builder-panel is-active" data-builder-panel="graphical">
+        <section class="builder-panel is-active" data-builder-panel="graphical" data-diagram-panel="fault-tree">
           <div class="canvas-wrap" aria-label="Fault tree canvas">
             <div class="fault-stage" id="fault-stage">
               <svg class="fault-lines" id="fault-lines" viewBox="0 0 760 560" aria-hidden="true"></svg>
               <div class="graph-layer" id="graph-layer"></div>
             </div>
+          </div>
+        </section>
+
+        <section class="builder-panel bdd-workspace-panel" data-diagram-panel="bdd">
+          <div class="bdd-workspace-wrap">
+            <svg id="workspace-bdd-graph" class="bdd-graph bdd-workspace-graph" viewBox="0 0 760 360" role="img" aria-label="Binary decision diagram graph"></svg>
           </div>
         </section>
 
@@ -183,7 +189,12 @@
               <option>topological</option>
               <option>alphabetical</option>
               <option>infix</option>
+              <option>custom</option>
             </select>
+          </label>
+          <label class="field" id="bdd-custom-order-field" hidden>
+            <span>Custom order</span>
+            <textarea id="bdd-custom-order-input" rows="4" spellcheck="false"></textarea>
           </label>
         </section>
       </aside>
@@ -290,13 +301,15 @@
               <strong id="metric-bdd-nodes">pending</strong>
             </article>
             <article>
-              <span>Exact probability</span>
-              <strong id="metric-bdd-probability">pending</strong>
-            </article>
-            <article>
               <span>Variable order</span>
               <strong id="metric-bdd-variable-order">pending</strong>
             </article>
+          </div>
+          <div class="bdd-action-panel">
+            <div class="section-heading">
+              <span>BDD View</span>
+              <button class="quiet-button" id="toggle-bdd-workspace">Show BDD</button>
+            </div>
           </div>
         </div>
       </section>
@@ -357,6 +370,6 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260528-undeveloped-events"></script>
+    <script src="./app.js?v=20260529-bdd-clean-canvas"></script>
   </body>
 </html>

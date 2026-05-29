@@ -12,11 +12,13 @@ const bddApiUrl = "http://localhost:8000/api/analyze/bdd";
 let projectName = "Generic Fault Tree Project";
 let selectedNodeId = "top";
 let activeBuilderMode = "graphical";
+let activeDiagramView = "fault-tree";
 let nodeSequence = 10;
 let model = createSampleModel();
 let invalidNodeIds = new Set();
 let undoStack = [];
 let redoStack = [];
+let lastBddGraph = null;
 
 const graphLayer = document.querySelector("#graph-layer");
 const faultLines = document.querySelector("#fault-lines");
@@ -43,8 +45,11 @@ const metricTopProbability = document.querySelector("#metric-top-probability");
 const metricVariableCount = document.querySelector("#metric-variable-count");
 const metricBddOrdering = document.querySelector("#metric-bdd-ordering");
 const metricBddNodes = document.querySelector("#metric-bdd-nodes");
-const metricBddProbability = document.querySelector("#metric-bdd-probability");
 const metricBddVariableOrder = document.querySelector("#metric-bdd-variable-order");
+const bddCustomOrderField = document.querySelector("#bdd-custom-order-field");
+const bddCustomOrderInput = document.querySelector("#bdd-custom-order-input");
+const workspaceBddGraph = document.querySelector("#workspace-bdd-graph");
+const toggleBddWorkspaceButton = document.querySelector("#toggle-bdd-workspace");
 const shortcutsModal = document.querySelector("#shortcuts-modal");
 const showShortcutsButton = document.querySelector("#show-shortcuts");
 const closeShortcutsButton = document.querySelector("#close-shortcuts");
@@ -430,18 +435,52 @@ function syncToolButtons() {
 }
 
 function setBuilderMode(mode) {
+  activeDiagramView = "fault-tree";
   activeBuilderMode = mode;
   if (mode === "textual") {
     syncTextFromGraph();
   }
+  syncDiagramButtons();
   document.querySelectorAll("[data-builder-mode]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.builderMode === mode);
   });
   document.querySelectorAll("[data-builder-panel]").forEach((panel) => {
     panel.classList.toggle("is-active", panel.dataset.builderPanel === mode);
   });
+  document.querySelector("[data-diagram-panel='bdd']").classList.remove("is-active");
   builderTitle.textContent = mode === "textual" ? "Textual Fault Tree Builder" : "Graphical Fault Tree Builder";
   statusLine.textContent = mode === "textual" ? "Textual builder ready" : "Graphical builder ready";
+}
+
+function setDiagramView(view) {
+  activeDiagramView = view;
+  syncDiagramButtons();
+
+  if (view === "fault-tree") {
+    document.querySelector("[data-diagram-panel='bdd']").classList.remove("is-active");
+    document.querySelectorAll("[data-builder-panel]").forEach((panel) => {
+      panel.classList.toggle("is-active", panel.dataset.builderPanel === activeBuilderMode);
+    });
+    builderTitle.textContent = activeBuilderMode === "textual" ? "Textual Fault Tree Builder" : "Graphical Fault Tree Builder";
+    statusLine.textContent = "Fault tree view ready.";
+    return;
+  }
+
+  document.querySelectorAll("[data-builder-panel]").forEach((panel) => {
+    panel.classList.remove("is-active");
+  });
+  document.querySelector("[data-diagram-panel='bdd']").classList.add("is-active");
+  builderTitle.textContent = "Binary Decision Diagram";
+  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 760, minHeight: 360 });
+  statusLine.textContent = lastBddGraph ? "BDD view ready." : "Run analysis to create the BDD.";
+}
+
+function syncDiagramButtons() {
+  toggleBddWorkspaceButton.textContent = activeDiagramView === "bdd" ? "Show Fault Tree" : "Show BDD";
+}
+
+function toggleBddWorkspaceView() {
+  setDiagramView(activeDiagramView === "bdd" ? "fault-tree" : "bdd");
 }
 
 function setProjectName(name) {
@@ -458,6 +497,7 @@ function createHistorySnapshot() {
     projectName,
     nodeSequence,
     bddOrdering: bddOrderingSelect.value,
+    bddCustomOrder: bddCustomOrderInput.value,
   };
 }
 
@@ -475,6 +515,7 @@ function restoreHistorySnapshot(snapshot, message) {
   projectName = snapshot.projectName;
   nodeSequence = snapshot.nodeSequence;
   bddOrderingSelect.value = snapshot.bddOrdering;
+  bddCustomOrderInput.value = snapshot.bddCustomOrder || "";
   setProjectName(projectName);
   syncTextFromGraph();
   renderAll();
@@ -1272,6 +1313,7 @@ function modelToProjectJson() {
     analysis: {
       quantification: "rare-event-approximation",
       variableOrdering: bddOrderingSelect.value,
+      customVariableOrder: parseCustomBddOrder(),
     },
     nodes: Object.values(model.nodes).map((node) => {
       const type = node.kind === "intermediate_event" ? "intermediate_event" : node.kind;
@@ -1523,9 +1565,11 @@ function loadProjectFromJson(project) {
   selectedNodeId = model.rootId;
   updateNodeSequence();
   setProjectName(projectName);
-  bddOrderingSelect.value = ["topological", "alphabetical", "infix"].includes(project.analysis?.variableOrdering)
+  bddOrderingSelect.value = ["topological", "alphabetical", "infix", "custom"].includes(project.analysis?.variableOrdering)
     ? project.analysis.variableOrdering
     : "topological";
+  bddCustomOrderInput.value = (project.analysis?.customVariableOrder || []).join(", ");
+  updateCustomBddOrderVisibility();
   syncTextFromGraph();
   setBuilderMode("graphical");
   renderAll();
@@ -1637,8 +1681,8 @@ function clearAnalysisResults(message) {
   metricVariableCount.textContent = String(getLeafEventNodes().length);
   metricBddOrdering.textContent = bddOrderingSelect.value;
   metricBddNodes.textContent = "pending";
-  metricBddProbability.textContent = "pending";
   metricBddVariableOrder.textContent = "pending";
+  renderBddGraph(null);
   clearAnalysisSummary();
 }
 
@@ -1742,17 +1786,100 @@ function renderBddResults(bdd) {
   if (!bdd) {
     metricBddOrdering.textContent = bddOrderingSelect.value;
     metricBddNodes.textContent = "pending";
-    metricBddProbability.textContent = "pending";
     metricBddVariableOrder.textContent = "pending";
     summaryBddNodes.textContent = "pending";
+    lastBddGraph = null;
+    renderBddGraph(null, workspaceBddGraph, { width: 760, minHeight: 360 });
     return;
   }
 
   metricBddOrdering.textContent = bdd.ordering;
   metricBddNodes.textContent = String(bdd.nodeCount);
-  metricBddProbability.textContent = formatNumber(bdd.exactProbability);
   metricBddVariableOrder.textContent = (bdd.variableOrder || []).join(" < ") || "none";
   summaryBddNodes.textContent = String(bdd.nodeCount);
+  lastBddGraph = bdd.graph || null;
+  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 760, minHeight: 360 });
+}
+
+function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
+  target.innerHTML = "";
+  if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
+    return;
+  }
+
+  const width = options.width || 760;
+  const minHeight = options.minHeight || 320;
+  const height = Math.max(minHeight, (Math.max(...graph.nodes.map((node) => node.level)) + 1) * 92);
+  target.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const levels = new Map();
+  graph.nodes.forEach((node) => {
+    if (!levels.has(node.level)) {
+      levels.set(node.level, []);
+    }
+    levels.get(node.level).push(node);
+  });
+
+  const positions = new Map();
+  [...levels.entries()].forEach(([level, nodes]) => {
+    const gap = width / (nodes.length + 1);
+    nodes.forEach((node, index) => {
+      positions.set(node.id, {
+        x: Math.round(gap * (index + 1)),
+        y: 46 + level * 84,
+      });
+    });
+  });
+
+  graph.edges.forEach((edge) => {
+    const start = positions.get(edge.source);
+    const end = positions.get(edge.target);
+    if (!start || !end) {
+      return;
+    }
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", start.x);
+    line.setAttribute("y1", start.y + 18);
+    line.setAttribute("x2", end.x);
+    line.setAttribute("y2", end.y - 18);
+    line.setAttribute("class", `bdd-edge ${edge.branch === "1" ? "is-high" : "is-low"}`);
+    target.appendChild(line);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", Math.round((start.x + end.x) / 2));
+    label.setAttribute("y", Math.round((start.y + end.y) / 2) - 4);
+    label.setAttribute("class", "bdd-edge-label");
+    label.textContent = edge.branch;
+    target.appendChild(label);
+  });
+
+  graph.nodes.forEach((node) => {
+    const position = positions.get(node.id);
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("class", `bdd-node ${node.kind === "terminal" ? "is-terminal" : ""}`);
+
+    const shape = document.createElementNS("http://www.w3.org/2000/svg", node.kind === "terminal" ? "rect" : "circle");
+    if (node.kind === "terminal") {
+      shape.setAttribute("x", position.x - 24);
+      shape.setAttribute("y", position.y - 18);
+      shape.setAttribute("width", 48);
+      shape.setAttribute("height", 36);
+      shape.setAttribute("rx", 8);
+    } else {
+      shape.setAttribute("cx", position.x);
+      shape.setAttribute("cy", position.y);
+      shape.setAttribute("r", 24);
+    }
+    group.appendChild(shape);
+
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", position.x);
+    text.setAttribute("y", position.y + 4);
+    text.textContent = node.label;
+    group.appendChild(text);
+    target.appendChild(group);
+  });
+
 }
 
 function renderAnalysisSummary(cutSets, topProbability, analysisDuration, bdd) {
@@ -1788,6 +1915,21 @@ function getBasicEventNodes() {
 
 function getLeafEventNodes() {
   return Object.values(model.nodes).filter((node) => node.kind === "basic_event" || node.kind === "undeveloped_event");
+}
+
+function parseCustomBddOrder() {
+  return bddCustomOrderInput.value
+    .split(/[\n,]+/)
+    .map((label) => label.trim())
+    .filter(Boolean);
+}
+
+function updateCustomBddOrderVisibility() {
+  const custom = bddOrderingSelect.value === "custom";
+  bddCustomOrderField.hidden = !custom;
+  if (custom && !bddCustomOrderInput.value.trim()) {
+    bddCustomOrderInput.value = getLeafEventNodes().map((node) => node.label).join(", ");
+  }
 }
 
 function getRepeatedBasicEventLabels() {
@@ -2009,8 +2151,15 @@ document.querySelector("#reset-text-model").addEventListener("click", () => {
   statusLine.textContent = "Text model reset.";
 });
 document.querySelector("#run-analysis").addEventListener("click", runAnalysis);
+toggleBddWorkspaceButton.addEventListener("click", toggleBddWorkspaceView);
+bddOrderingSelect.addEventListener("change", () => {
+  updateCustomBddOrderVisibility();
+  runAnalysis();
+});
+bddCustomOrderInput.addEventListener("change", runAnalysis);
 
 setProjectName(projectName);
+updateCustomBddOrderVisibility();
 syncToolButtons();
 renderAll();
 runAnalysis();

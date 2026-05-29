@@ -112,7 +112,7 @@ class FAUTreeRequestHandler(BaseHTTPRequestHandler):
                 payload = self._read_json_body()
                 project = FaultTreeProject.from_dict(payload)
                 ordering = project.analysis.variable_ordering
-                bdd_result = compute_bdd_analysis(project, ordering)
+                bdd_result = compute_bdd_analysis(project, ordering, project.analysis.custom_variable_order)
                 _json_response(
                     self,
                     200,

@@ -48,12 +48,16 @@ class FaultTreeEdge:
 class AnalysisSettings:
     quantification: str = "rare-event-approximation"
     variable_ordering: str = "topological"
+    custom_variable_order: tuple[str, ...] = ()
 
-    def to_dict(self) -> dict[str, str]:
-        return {
+    def to_dict(self) -> dict:
+        payload = {
             "quantification": self.quantification,
             "variableOrdering": self.variable_ordering,
         }
+        if self.custom_variable_order:
+            payload["customVariableOrder"] = list(self.custom_variable_order)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -104,6 +108,7 @@ class FaultTreeProject:
             analysis=AnalysisSettings(
                 quantification=analysis_payload.get("quantification", "rare-event-approximation"),
                 variable_ordering=analysis_payload.get("variableOrdering", "topological"),
+                custom_variable_order=tuple(analysis_payload.get("customVariableOrder", [])),
             ),
             nodes=[
                 FaultTreeNode(

@@ -111,6 +111,25 @@ class BDDAnalysisTests(unittest.TestCase):
         self.assertEqual(result.variable_order, ("A", "Unspecified cause"))
         self.assertAlmostEqual(result.exact_probability, 0.28)
 
+    def test_custom_order_is_used_and_graph_is_returned_for_small_bdd(self) -> None:
+        result = compute_bdd_analysis(
+            build_sample_project(),
+            "custom",
+            ("Control unit failure", "Backup protection failure", "Primary protection failure", "Power supply failure"),
+        )
+
+        self.assertEqual(
+            result.variable_order,
+            ("Control unit failure", "Backup protection failure", "Primary protection failure", "Power supply failure"),
+        )
+        self.assertIsNotNone(result.graph)
+        self.assertIn("nodes", result.graph or {})
+        self.assertIn("edges", result.graph or {})
+
+    def test_custom_order_requires_all_variables_once(self) -> None:
+        with self.assertRaisesRegex(ValueError, "each leaf event exactly once"):
+            compute_bdd_analysis(build_sample_project(), "custom", ("Control unit failure",))
+
 
 if __name__ == "__main__":
     unittest.main()

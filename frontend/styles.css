@@ -384,6 +384,10 @@ button {
   display: block;
 }
 
+.builder-panel[data-diagram-panel="bdd"].is-active {
+  display: block;
+}
+
 .panel-block[data-builder-panel]:not(.is-active) {
   display: none;
 }
@@ -674,6 +678,18 @@ button {
   box-shadow: var(--shadow);
 }
 
+#bdd-custom-order-input {
+  width: 100%;
+  min-height: 86px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
 .text-actions {
   display: flex;
   gap: 8px;
@@ -822,6 +838,95 @@ th {
   margin-top: 8px;
   font-size: 22px;
   letter-spacing: 0;
+}
+
+.bdd-action-panel {
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.bdd-graph {
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(18, 107, 100, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(49, 95, 125, 0.04) 1px, transparent 1px),
+    #fffdf9;
+  background-size: 24px 24px;
+}
+
+.bdd-workspace-panel {
+  padding: 0 18px 18px;
+}
+
+.bdd-workspace-wrap {
+  height: calc(100% - 8px);
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at center, rgba(18, 107, 100, 0.08) 1px, transparent 1px),
+    var(--surface);
+  background-size: 20px 20px;
+  box-shadow: var(--shadow);
+}
+
+.bdd-workspace-graph {
+  width: min(920px, 100%);
+  min-height: 360px;
+  max-height: 520px;
+  align-self: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.bdd-edge {
+  stroke: #5d6470;
+  stroke-width: 1.8;
+}
+
+.bdd-edge.is-low {
+  stroke-dasharray: 5 4;
+}
+
+.bdd-edge.is-high {
+  stroke: var(--teal);
+  stroke-width: 2.2;
+}
+
+.bdd-edge-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.bdd-node circle,
+.bdd-node rect {
+  fill: #fff;
+  stroke: var(--blue);
+  stroke-width: 2;
+}
+
+.bdd-node.is-terminal rect {
+  fill: var(--surface-2);
+  stroke: var(--ink);
+}
+
+.bdd-node text {
+  fill: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  text-anchor: middle;
+  pointer-events: none;
 }
 
 .modal-backdrop {
