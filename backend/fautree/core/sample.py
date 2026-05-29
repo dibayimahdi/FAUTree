@@ -19,7 +19,7 @@ def build_sample_project() -> FaultTreeProject:
         ),
         analysis=AnalysisSettings(
             quantification="rare-event-approximation",
-            variable_ordering="topological",
+            variable_ordering="infix",
         ),
         nodes=[
             FaultTreeNode("top", "top_event", "System failure"),

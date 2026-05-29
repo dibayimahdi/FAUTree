@@ -52,7 +52,7 @@ class BDDAnalysisTests(unittest.TestCase):
         )
 
         good = compute_bdd_analysis(project, "infix")
-        bad = compute_bdd_analysis(project, "topological")
+        bad = compute_bdd_analysis(project, "custom", ("x6", "x4", "x2", "x5", "x3", "x1"))
 
         self.assertEqual(good.variable_order, ("x1", "x2", "x3", "x4", "x5", "x6"))
         self.assertEqual(bad.variable_order, ("x6", "x4", "x2", "x5", "x3", "x1"))

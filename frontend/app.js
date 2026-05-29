@@ -9,17 +9,21 @@ const emptyTextModel = `Top event = BASIC(0)`;
 const analysisApiUrl = "http://localhost:8000/api/analyze/minimal-cut-sets";
 const bddApiUrl = "http://localhost:8000/api/analyze/bdd";
 
-let projectName = "Generic Fault Tree Project";
+let projectName = "Untitled Fault Tree";
 let selectedNodeId = "top";
 let activeBuilderMode = "graphical";
 let activeDiagramView = "fault-tree";
+let activeResultTab = "qualitative";
 let nodeSequence = 10;
-let model = createSampleModel();
+let model = createEmptyModel();
 let invalidNodeIds = new Set();
 let undoStack = [];
 let redoStack = [];
 let lastBddGraph = null;
+let resultsPaneResizeState = null;
+let customBddOrder = [];
 
+const appShell = document.querySelector(".app-shell");
 const graphLayer = document.querySelector("#graph-layer");
 const faultLines = document.querySelector("#fault-lines");
 const faultStage = document.querySelector("#fault-stage");
@@ -47,7 +51,10 @@ const metricBddOrdering = document.querySelector("#metric-bdd-ordering");
 const metricBddNodes = document.querySelector("#metric-bdd-nodes");
 const metricBddVariableOrder = document.querySelector("#metric-bdd-variable-order");
 const bddCustomOrderField = document.querySelector("#bdd-custom-order-field");
-const bddCustomOrderInput = document.querySelector("#bdd-custom-order-input");
+const bddCustomOrderNote = document.querySelector("#bdd-custom-order-note");
+const bddCustomOrderList = document.querySelector("#bdd-custom-order-list");
+const bddSettingsPanel = document.querySelector("#bdd-settings-panel");
+const resultsPane = document.querySelector(".results-pane");
 const workspaceBddGraph = document.querySelector("#workspace-bdd-graph");
 const toggleBddWorkspaceButton = document.querySelector("#toggle-bdd-workspace");
 const shortcutsModal = document.querySelector("#shortcuts-modal");
@@ -70,9 +77,165 @@ const summaryAnalysisTime = document.querySelector("#summary-analysis-time");
 const summaryBasicEvents = document.querySelector("#summary-basic-events");
 const summaryRepeatedEvents = document.querySelector("#summary-repeated-events");
 const summaryAnalysisEngine = document.querySelector("#summary-analysis-engine");
-const summaryBddNodes = document.querySelector("#summary-bdd-nodes");
+const resultsResizeHandle = document.querySelector("#results-resize-handle");
 
-textArea.value = defaultTextModel;
+textArea.value = emptyTextModel;
+
+function setResultsPaneHeight(height) {
+  const viewportHeight = window.innerHeight || 0;
+  const topbarHeight = 72;
+  const minHeight = 160;
+  const reservedWorkspaceHeight = 220;
+  const maxHeight = Math.max(minHeight, viewportHeight - topbarHeight - reservedWorkspaceHeight);
+  const clampedHeight = Math.max(minHeight, Math.min(height, maxHeight));
+  appShell?.style.setProperty("--results-pane-height", `${clampedHeight}px`);
+}
+
+function syncBddSettingsVisibility() {
+  if (!bddSettingsPanel) {
+    return;
+  }
+  bddSettingsPanel.hidden = !(activeDiagramView === "bdd" || activeResultTab === "bdd");
+}
+
+function focusCustomBddOrderEditor() {
+  if (bddOrderingSelect.value !== "custom" || bddCustomOrderField.classList.contains("is-disabled")) {
+    return;
+  }
+  const firstMoveButton = bddCustomOrderList?.querySelector(".bdd-order-button:not(:disabled)");
+  if (firstMoveButton) {
+    firstMoveButton.focus();
+    return;
+  }
+  bddCustomOrderList?.focus();
+}
+
+function setActiveResultTab(panelName) {
+  activeResultTab = panelName;
+  syncBddSettingsVisibility();
+
+  document.querySelectorAll("[data-result-tab]").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.resultTab === panelName);
+  });
+
+  document.querySelectorAll("[data-result-panel]").forEach((panel) => {
+    panel.classList.toggle("is-active", panel.dataset.resultPanel === panelName);
+  });
+}
+
+function getLeafEventLabels() {
+  return uniqueItems(getLeafEventNodes().map((node) => node.label).filter(Boolean));
+}
+
+function syncCustomBddOrder(preferredOrder = customBddOrder) {
+  const availableLabels = getLeafEventLabels();
+  const preferred = uniqueItems((preferredOrder || []).map((label) => String(label).trim()).filter(Boolean));
+  const synced = preferred.filter((label) => availableLabels.includes(label));
+  availableLabels.forEach((label) => {
+    if (!synced.includes(label)) {
+      synced.push(label);
+    }
+  });
+  customBddOrder = synced;
+}
+
+function renderCustomBddOrderEditor() {
+  if (!bddCustomOrderList) {
+    return;
+  }
+
+  syncCustomBddOrder();
+  bddCustomOrderList.innerHTML = "";
+
+  if (customBddOrder.length === 0) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "bdd-order-item";
+    emptyState.innerHTML = "<strong>Add basic events to define a custom BDD order.</strong>";
+    bddCustomOrderList.appendChild(emptyState);
+    return;
+  }
+
+  customBddOrder.forEach((label, index) => {
+    const item = document.createElement("div");
+    item.className = "bdd-order-item";
+
+    const title = document.createElement("strong");
+    title.textContent = `${index + 1}. ${label}`;
+
+    const actions = document.createElement("div");
+    actions.className = "bdd-order-actions";
+
+    const moveUpButton = document.createElement("button");
+    moveUpButton.type = "button";
+    moveUpButton.className = "bdd-order-button";
+    moveUpButton.textContent = "^";
+    moveUpButton.title = `Move ${label} up`;
+    moveUpButton.disabled = bddOrderingSelect.value !== "custom" || index === 0;
+    moveUpButton.addEventListener("click", () => moveCustomBddVariable(index, -1));
+
+    const moveDownButton = document.createElement("button");
+    moveDownButton.type = "button";
+    moveDownButton.className = "bdd-order-button";
+    moveDownButton.textContent = "v";
+    moveDownButton.title = `Move ${label} down`;
+    moveDownButton.disabled = bddOrderingSelect.value !== "custom" || index === customBddOrder.length - 1;
+    moveDownButton.addEventListener("click", () => moveCustomBddVariable(index, 1));
+
+    actions.append(moveUpButton, moveDownButton);
+    item.append(title, actions);
+    bddCustomOrderList.appendChild(item);
+  });
+}
+
+function moveCustomBddVariable(index, direction) {
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= customBddOrder.length) {
+    return;
+  }
+
+  pushUndoSnapshot();
+  [customBddOrder[index], customBddOrder[targetIndex]] = [customBddOrder[targetIndex], customBddOrder[index]];
+  renderCustomBddOrderEditor();
+
+  if (bddOrderingSelect.value === "custom") {
+    statusLine.textContent = "Custom BDD variable order updated. Recomputing BDD...";
+    runAnalysis();
+    return;
+  }
+
+  statusLine.textContent = "Custom BDD variable order updated.";
+}
+
+function startResultsPaneResize(event) {
+  if (!appShell || window.innerWidth <= 840) {
+    return;
+  }
+  event.preventDefault();
+  resultsResizeHandle.setPointerCapture?.(event.pointerId);
+  resultsPaneResizeState = {
+    startY: event.clientY,
+    startHeight: resultsPane?.getBoundingClientRect().height || 220,
+  };
+  document.body.style.cursor = "ns-resize";
+  document.body.style.userSelect = "none";
+}
+
+function updateResultsPaneResize(event) {
+  if (!resultsPaneResizeState) {
+    return;
+  }
+  const nextHeight = resultsPaneResizeState.startHeight - (event.clientY - resultsPaneResizeState.startY);
+  setResultsPaneHeight(nextHeight);
+}
+
+function stopResultsPaneResize() {
+  if (!resultsPaneResizeState) {
+    return;
+  }
+  resultsPaneResizeState = null;
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+}
 
 function createSampleModel() {
   return {
@@ -448,6 +611,7 @@ function setBuilderMode(mode) {
     panel.classList.toggle("is-active", panel.dataset.builderPanel === mode);
   });
   document.querySelector("[data-diagram-panel='bdd']").classList.remove("is-active");
+  syncBddSettingsVisibility();
   builderTitle.textContent = mode === "textual" ? "Textual Fault Tree Builder" : "Graphical Fault Tree Builder";
   statusLine.textContent = mode === "textual" ? "Textual builder ready" : "Graphical builder ready";
 }
@@ -455,6 +619,7 @@ function setBuilderMode(mode) {
 function setDiagramView(view) {
   activeDiagramView = view;
   syncDiagramButtons();
+  syncBddSettingsVisibility();
 
   if (view === "fault-tree") {
     document.querySelector("[data-diagram-panel='bdd']").classList.remove("is-active");
@@ -491,13 +656,14 @@ function setProjectName(name) {
 }
 
 function createHistorySnapshot() {
+  syncCustomBddOrder();
   return {
     model: JSON.parse(JSON.stringify(model)),
     selectedNodeId,
     projectName,
     nodeSequence,
     bddOrdering: bddOrderingSelect.value,
-    bddCustomOrder: bddCustomOrderInput.value,
+    bddCustomOrder: [...customBddOrder],
   };
 }
 
@@ -515,8 +681,9 @@ function restoreHistorySnapshot(snapshot, message) {
   projectName = snapshot.projectName;
   nodeSequence = snapshot.nodeSequence;
   bddOrderingSelect.value = snapshot.bddOrdering;
-  bddCustomOrderInput.value = snapshot.bddCustomOrder || "";
+  syncCustomBddOrder(snapshot.bddCustomOrder || []);
   setProjectName(projectName);
+  updateCustomBddOrderVisibility();
   syncTextFromGraph();
   renderAll();
   clearAnalysisResults("Run analysis to compute cut sets.");
@@ -1302,6 +1469,7 @@ function downloadTextFile(filename, content, type) {
 }
 
 function modelToProjectJson() {
+  syncCustomBddOrder();
   return {
     schemaVersion: "0.1.0",
     project: {
@@ -1390,7 +1558,7 @@ function loadModelFromSbe(content, filename) {
   syncTextFromGraph();
   setBuilderMode("graphical");
   renderAll();
-  runAnalysis();
+  clearAnalysisResults("Run analysis to compute cut sets.");
 }
 
 function parseSbeModel(content) {
@@ -1565,15 +1733,15 @@ function loadProjectFromJson(project) {
   selectedNodeId = model.rootId;
   updateNodeSequence();
   setProjectName(projectName);
-  bddOrderingSelect.value = ["topological", "alphabetical", "infix", "custom"].includes(project.analysis?.variableOrdering)
+  bddOrderingSelect.value = ["alphabetical", "infix", "custom"].includes(project.analysis?.variableOrdering)
     ? project.analysis.variableOrdering
-    : "topological";
-  bddCustomOrderInput.value = (project.analysis?.customVariableOrder || []).join(", ");
+    : "infix";
+  syncCustomBddOrder(project.analysis?.customVariableOrder || []);
   updateCustomBddOrderVisibility();
   syncTextFromGraph();
   setBuilderMode("graphical");
   renderAll();
-  runAnalysis();
+  clearAnalysisResults("Run analysis to compute cut sets.");
 }
 
 function normalizeImportedNode(node) {
@@ -1779,7 +1947,6 @@ function clearAnalysisSummary() {
   summaryBasicEvents.textContent = String(getLeafEventNodes().length);
   summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
   summaryAnalysisEngine.textContent = "Python backend";
-  summaryBddNodes.textContent = "pending";
 }
 
 function renderBddResults(bdd) {
@@ -1787,16 +1954,18 @@ function renderBddResults(bdd) {
     metricBddOrdering.textContent = bddOrderingSelect.value;
     metricBddNodes.textContent = "pending";
     metricBddVariableOrder.textContent = "pending";
-    summaryBddNodes.textContent = "pending";
     lastBddGraph = null;
     renderBddGraph(null, workspaceBddGraph, { width: 760, minHeight: 360 });
     return;
   }
 
+  const visibleNonTerminalNodeCount = Array.isArray(bdd.graph?.nodes)
+    ? bdd.graph.nodes.filter((node) => node.kind !== "terminal").length
+    : bdd.nodeCount;
+
   metricBddOrdering.textContent = bdd.ordering;
-  metricBddNodes.textContent = String(bdd.nodeCount);
+  metricBddNodes.textContent = String(visibleNonTerminalNodeCount);
   metricBddVariableOrder.textContent = (bdd.variableOrder || []).join(" < ") || "none";
-  summaryBddNodes.textContent = String(bdd.nodeCount);
   lastBddGraph = bdd.graph || null;
   renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 760, minHeight: 360 });
 }
@@ -1831,7 +2000,14 @@ function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
     });
   });
 
-  graph.edges.forEach((edge) => {
+  [...graph.edges]
+    .sort((left, right) => {
+      if (left.branch === right.branch) {
+        return 0;
+      }
+      return left.branch === "1" ? -1 : 1;
+    })
+    .forEach((edge) => {
     const start = positions.get(edge.source);
     const end = positions.get(edge.target);
     if (!start || !end) {
@@ -1897,7 +2073,6 @@ function renderAnalysisSummary(cutSets, topProbability, analysisDuration, bdd) {
   summaryBasicEvents.textContent = String(getLeafEventNodes().length);
   summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
   summaryAnalysisEngine.textContent = "Python backend";
-  summaryBddNodes.textContent = bdd ? String(bdd.nodeCount) : "pending";
 }
 
 function findDominantCutSet(cutSets) {
@@ -1918,17 +2093,23 @@ function getLeafEventNodes() {
 }
 
 function parseCustomBddOrder() {
-  return bddCustomOrderInput.value
-    .split(/[\n,]+/)
-    .map((label) => label.trim())
-    .filter(Boolean);
+  syncCustomBddOrder();
+  return [...customBddOrder];
 }
 
 function updateCustomBddOrderVisibility() {
   const custom = bddOrderingSelect.value === "custom";
-  bddCustomOrderField.hidden = !custom;
-  if (custom && !bddCustomOrderInput.value.trim()) {
-    bddCustomOrderInput.value = getLeafEventNodes().map((node) => node.label).join(", ");
+  bddCustomOrderField.classList.toggle("is-disabled", !custom);
+  bddCustomOrderField.setAttribute("aria-disabled", custom ? "false" : "true");
+  if (bddCustomOrderNote) {
+    bddCustomOrderNote.textContent = custom
+      ? "Move variables up or down, then run the BDD with this order."
+      : "Select custom to activate variable reordering.";
+  }
+  syncCustomBddOrder();
+  renderCustomBddOrderEditor();
+  if (custom) {
+    queueMicrotask(focusCustomBddOrderEditor);
   }
 }
 
@@ -2026,8 +2207,10 @@ function renderAll() {
   if (!model.nodes[selectedNodeId]) {
     selectedNodeId = model.rootId;
   }
+  syncCustomBddOrder();
   refreshInvalidNodes();
   renderCanvas();
+  renderCustomBddOrderEditor();
   renderTreeList();
   selectNode(selectedNodeId);
 }
@@ -2091,15 +2274,7 @@ document.querySelectorAll("[data-builder-mode]").forEach((button) => {
 
 document.querySelectorAll("[data-result-tab]").forEach((tab) => {
   tab.addEventListener("click", () => {
-    const panelName = tab.dataset.resultTab;
-
-    document.querySelectorAll("[data-result-tab]").forEach((item) => {
-      item.classList.toggle("is-active", item === tab);
-    });
-
-    document.querySelectorAll("[data-result-panel]").forEach((panel) => {
-      panel.classList.toggle("is-active", panel.dataset.resultPanel === panelName);
-    });
+    setActiveResultTab(tab.dataset.resultTab);
   });
 });
 
@@ -2153,13 +2328,22 @@ document.querySelector("#reset-text-model").addEventListener("click", () => {
 document.querySelector("#run-analysis").addEventListener("click", runAnalysis);
 toggleBddWorkspaceButton.addEventListener("click", toggleBddWorkspaceView);
 bddOrderingSelect.addEventListener("change", () => {
+  if (bddOrderingSelect.value === "custom") {
+    setActiveResultTab("bdd");
+  }
   updateCustomBddOrderVisibility();
   runAnalysis();
 });
-bddCustomOrderInput.addEventListener("change", runAnalysis);
+resultsResizeHandle.addEventListener("pointerdown", startResultsPaneResize);
+window.addEventListener("pointermove", updateResultsPaneResize);
+window.addEventListener("pointerup", stopResultsPaneResize);
+window.addEventListener("pointercancel", stopResultsPaneResize);
 
 setProjectName(projectName);
+syncCustomBddOrder();
 updateCustomBddOrderVisibility();
+syncBddSettingsVisibility();
 syncToolButtons();
 renderAll();
-runAnalysis();
+clearAnalysisResults("Add gates and basic events to compute cut sets.");
+statusLine.textContent = "New project created with an empty top event.";

@@ -47,7 +47,7 @@ class FaultTreeEdge:
 @dataclass(frozen=True)
 class AnalysisSettings:
     quantification: str = "rare-event-approximation"
-    variable_ordering: str = "topological"
+    variable_ordering: str = "infix"
     custom_variable_order: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
@@ -107,7 +107,7 @@ class FaultTreeProject:
             ),
             analysis=AnalysisSettings(
                 quantification=analysis_payload.get("quantification", "rare-event-approximation"),
-                variable_ordering=analysis_payload.get("variableOrdering", "topological"),
+                variable_ordering="infix" if analysis_payload.get("variableOrdering", "infix") == "topological" else analysis_payload.get("variableOrdering", "infix"),
                 custom_variable_order=tuple(analysis_payload.get("customVariableOrder", [])),
             ),
             nodes=[

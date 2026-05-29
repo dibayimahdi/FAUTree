@@ -12,6 +12,7 @@
   --olive: #536d45;
   --blue: #315f7d;
   --shadow: 0 16px 36px rgba(36, 39, 43, 0.1);
+  --results-pane-height: 220px;
   color-scheme: light;
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
@@ -47,7 +48,7 @@ button {
   height: 100vh;
   display: grid;
   grid-template-columns: minmax(250px, 280px) minmax(520px, 1fr) minmax(280px, 320px);
-  grid-template-rows: 72px minmax(0, 1fr) 220px;
+  grid-template-rows: 72px minmax(0, 1fr) var(--results-pane-height);
   grid-template-areas:
     "topbar topbar topbar"
     "sidebar workspace inspector"
@@ -678,16 +679,72 @@ button {
   box-shadow: var(--shadow);
 }
 
-#bdd-custom-order-input {
-  width: 100%;
-  min-height: 86px;
-  padding: 10px;
+.field-note {
+  margin: -2px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.field.is-disabled .field-note,
+.field.is-disabled .bdd-order-item strong {
+  color: var(--muted);
+}
+
+.field.is-disabled .bdd-order-list {
+  opacity: 0.55;
+}
+
+.field.is-disabled .bdd-order-item {
+  background: #f5f1e8;
+}
+
+.field.is-disabled .bdd-order-button {
+  pointer-events: none;
+}
+
+.bdd-order-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bdd-order-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: #fffdf9;
+}
+
+.bdd-order-item strong {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.bdd-order-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.bdd-order-button {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-2);
   color: var(--ink);
-  font: inherit;
-  resize: vertical;
+  font-weight: 800;
+}
+
+.bdd-order-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .text-actions {
@@ -700,9 +757,49 @@ button {
   grid-area: results;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: rgba(255, 253, 250, 0.96);
   border-top: 1px solid var(--line);
-  overflow: auto;
+  overflow: hidden;
+}
+
+.results-resize-handle {
+  width: 100%;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 0;
+  background:
+    linear-gradient(to bottom, rgba(18, 107, 100, 0.12), rgba(18, 107, 100, 0.02)),
+    rgba(255, 253, 250, 0.98);
+  border-bottom: 1px solid rgba(18, 107, 100, 0.14);
+  cursor: ns-resize;
+  position: relative;
+  touch-action: none;
+}
+
+.results-resize-handle::before {
+  content: "";
+  width: 72px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(18, 107, 100, 0.34);
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.results-resize-handle:hover,
+.results-resize-handle:focus-visible {
+  background:
+    linear-gradient(to bottom, rgba(18, 107, 100, 0.18), rgba(18, 107, 100, 0.04)),
+    rgba(255, 253, 250, 0.98);
+}
+
+.results-resize-handle:focus-visible {
+  outline: 2px solid rgba(18, 107, 100, 0.35);
+  outline-offset: -2px;
 }
 
 .result-panel {
@@ -710,6 +807,7 @@ button {
 }
 
 .results-tabs {
+  flex: 0 0 auto;
   display: flex;
   gap: 6px;
   padding: 12px 20px 0;
@@ -729,7 +827,10 @@ button {
 
 .result-panel {
   display: none;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 14px 20px 22px;
+  overflow: auto;
 }
 
 .result-panel.is-active {
@@ -835,9 +936,11 @@ th {
 
 .metric-grid strong {
   display: block;
-  margin-top: 8px;
-  font-size: 22px;
+  margin-top: 7px;
+  font-size: 15px;
+  line-height: 1.2;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .bdd-action-panel {
@@ -889,21 +992,23 @@ th {
 }
 
 .bdd-edge {
-  stroke: #5d6470;
-  stroke-width: 1.8;
+  stroke: #202630;
+  stroke-width: 1.4;
 }
 
 .bdd-edge.is-low {
-  stroke-dasharray: 5 4;
+  stroke: #c53b3b;
+  stroke-width: 2.8;
+  stroke-dasharray: 7 5;
 }
 
 .bdd-edge.is-high {
-  stroke: var(--teal);
-  stroke-width: 2.2;
+  stroke: #202630;
+  stroke-width: 1.4;
 }
 
 .bdd-edge-label {
-  fill: var(--muted);
+  fill: #202630;
   font-size: 11px;
   font-weight: 800;
   text-anchor: middle;
@@ -1071,7 +1176,7 @@ th {
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: minmax(240px, 270px) minmax(0, 1fr);
-    grid-template-rows: 72px minmax(0, 1fr) 250px auto;
+    grid-template-rows: 72px minmax(0, 1fr) var(--results-pane-height) auto;
     grid-template-areas:
       "topbar topbar"
       "sidebar workspace"
@@ -1105,6 +1210,14 @@ th {
     display: block;
     height: auto;
     overflow: visible;
+  }
+
+  .results-pane {
+    overflow: visible;
+  }
+
+  .results-resize-handle {
+    display: none;
   }
 
   .topbar,

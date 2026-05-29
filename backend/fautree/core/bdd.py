@@ -136,11 +136,12 @@ class BDDAnalyzer:
         root_id = self._top_event().id
         bdd_root = self._build_bdd(root_id, manager)
         probability = manager.probability(bdd_root, self._probabilities_by_label())
+        reachable = self._reachable_bdd_ids(manager, bdd_root)
 
         return BDDAnalysisResult(
             ordering=self.ordering,
             variable_order=variable_order,
-            node_count=len(manager.nodes),
+            node_count=sum(1 for node_id in reachable if node_id not in {BDD_FALSE, BDD_TRUE}),
             exact_probability=probability,
             root=bdd_root,
             graph=self._graph_payload(manager, bdd_root),
@@ -174,11 +175,9 @@ class BDDAnalyzer:
         return result
 
     def _variable_order(self) -> tuple[str, ...]:
-        labels = self._basic_event_labels_in_topological_order()
+        labels = self._basic_event_labels_in_infix_order()
         if self.ordering == "alphabetical":
             return tuple(sorted(labels))
-        if self.ordering == "infix":
-            return tuple(self._basic_event_labels_in_infix_order())
         if self.ordering == "custom":
             return self._validated_custom_order(labels)
         return tuple(labels)
@@ -198,13 +197,6 @@ class BDDAnalyzer:
                 details.append(f"unknown: {', '.join(extra)}")
             raise ValueError(f"Custom BDD variable order must contain each leaf event exactly once ({'; '.join(details)}).")
         return tuple(requested)
-
-    def _basic_event_labels_in_topological_order(self) -> list[str]:
-        labels: list[str] = []
-        for node in self.project.nodes:
-            if node.type in {"basic_event", "undeveloped_event"} and node.label not in labels:
-                labels.append(node.label)
-        return labels
 
     def _basic_event_labels_in_infix_order(self) -> list[str]:
         labels: list[str] = []
@@ -314,7 +306,7 @@ class BDDAnalyzer:
         return manager.variable_rank[manager.nodes[node_id].variable]
 
 
-def compute_bdd_analysis(project: FaultTreeProject, ordering: str = "topological", custom_order: tuple[str, ...] = ()) -> BDDAnalysisResult:
-    if ordering not in {"topological", "alphabetical", "infix", "custom"}:
+def compute_bdd_analysis(project: FaultTreeProject, ordering: str = "infix", custom_order: tuple[str, ...] = ()) -> BDDAnalysisResult:
+    if ordering not in {"alphabetical", "infix", "custom"}:
         raise ValueError(f"Unsupported BDD ordering: {ordering}")
     return BDDAnalyzer(project, ordering, custom_order).compute()

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FAUTree</title>
-    <link rel="stylesheet" href="./styles.css?v=20260528-export-dialog-polish">
+    <link rel="stylesheet" href="./styles.css?v=20260530-custom-order-disabled">
   </head>
   <body>
     <div class="app-shell">
@@ -179,27 +179,34 @@
           </dl>
         </section>
 
-        <section class="panel-block">
+        <section class="panel-block" id="bdd-settings-panel" hidden>
           <div class="section-heading">
             <span>BDD Settings</span>
           </div>
           <label class="field">
             <span>BDD ordering</span>
             <select id="bdd-ordering-select">
-              <option>topological</option>
               <option>alphabetical</option>
               <option>infix</option>
               <option>custom</option>
             </select>
           </label>
-          <label class="field" id="bdd-custom-order-field" hidden>
+          <label class="field is-disabled" id="bdd-custom-order-field" aria-disabled="true">
             <span>Custom order</span>
-            <textarea id="bdd-custom-order-input" rows="4" spellcheck="false"></textarea>
+            <p class="field-note" id="bdd-custom-order-note">Select custom to activate variable reordering.</p>
+            <div id="bdd-custom-order-list" class="bdd-order-list" aria-label="Custom BDD variable order" tabindex="-1"></div>
           </label>
         </section>
       </aside>
 
       <section class="results-pane">
+        <button
+          class="results-resize-handle"
+          id="results-resize-handle"
+          type="button"
+          aria-label="Resize analysis results pane"
+          title="Drag to resize analysis results pane"
+        ></button>
         <div class="results-tabs" role="tablist" aria-label="Analysis results">
           <button class="result-tab is-active" data-result-tab="qualitative">Qualitative</button>
           <button class="result-tab" data-result-tab="quantitative">Quantitative</button>
@@ -248,10 +255,6 @@
               <span>Analysis engine</span>
               <strong id="summary-analysis-engine">Python backend</strong>
             </article>
-            <article>
-              <span>BDD nodes</span>
-              <strong id="summary-bdd-nodes">pending</strong>
-            </article>
           </div>
           <table>
             <thead>
@@ -297,9 +300,9 @@
               <strong id="metric-bdd-ordering">pending</strong>
             </article>
             <article>
-              <span>BDD nodes</span>
-              <strong id="metric-bdd-nodes">pending</strong>
-            </article>
+              <span>BDD non-terminal nodes</span>
+                <strong id="metric-bdd-nodes">pending</strong>
+              </article>
             <article>
               <span>Variable order</span>
               <strong id="metric-bdd-variable-order">pending</strong>
@@ -370,6 +373,6 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260529-bdd-clean-canvas"></script>
+    <script src="./app.js?v=20260530-custom-order-disabled"></script>
   </body>
 </html>
