@@ -1,7 +1,8 @@
 const defaultTextModel = "((A /\\ B) \\/ (C /\\ (D \\/ E) /\\ F))";
 const emptyTextModel = "";
-const analysisApiUrl = "http://localhost:8000/api/analyze/minimal-cut-sets";
-const bddApiUrl = "http://localhost:8000/api/analyze/bdd";
+const API_BASE_URL = window.location.hostname === "localhost" ? "http://localhost:8000" : "https://api.fautree.com";
+const analysisApiUrl = `${API_BASE_URL}/api/analyze/minimal-cut-sets`;
+const bddApiUrl = `${API_BASE_URL}/api/analyze/bdd`;
 
 let projectName = "Untitled Fault Tree";
 let selectedNodeId = "top";
