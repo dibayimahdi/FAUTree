@@ -1,77 +1,64 @@
 # FAUTree
 
-FAUTree is a fault tree analysis platform with a graphical editor, Boolean expression builder, and analysis views for qualitative, quantitative, and BDD outputs.
+FAUTree is a web-based Fault Tree Analysis (FTA) platform that combines graphical modeling, Boolean expression construction, and advanced analysis capabilities within a unified environment.
 
-This repository is currently in **public beta** and under active development.
+## Features
 
-## Current capabilities
+* Interactive graphical fault tree editor
+* Boolean expression builder and conversion to fault trees
+* Import/export support for `.fautree.json` projects and `.sbe` files
+* Qualitative analysis (Minimal Cut Sets)
+* Quantitative analysis
+* Binary Decision Diagram (BDD) generation and visualization
+* Integrated project management and analysis workflow
 
-- Graphical fault tree editing with event/gate tools
-- Boolean expression input and conversion to a graphical tree
-- Fault tree export/import (`.fautree.json`) and import of `.sbe`
-- Analysis panels for:
-  - Qualitative results (minimal cut sets)
-  - Quantitative metrics
-  - BDD summaries and BDD workspace view
+## Live Demonstration
 
-## Quick start
+Coming soon at:
 
-### 1) Start the frontend
+https://fautree.com
 
-From repository root:
+A public demonstration of the platform will be available through the link above.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start_frontend.ps1
-```
+## Technology Stack
 
-Open:
+* Frontend: HTML, CSS, JavaScript
+* Backend: Python
+* Analysis Engine: Fault Tree Analysis, Minimal Cut Set generation, BDD processing
 
-```text
-http://localhost:5173/frontend/
-```
-
-### 2) Start the backend (separate terminal)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start_backend.ps1
-```
-
-Useful endpoints:
+## Project Structure
 
 ```text
-http://localhost:8000/health
-http://localhost:8000/api/projects/sample
-http://localhost:8000/api/schema
+frontend/    Web-based user interface
+backend/     Analysis engine and API server
+examples/    Sample projects and SBE examples
+docs/        Architecture notes and roadmap
+scripts/     Development and startup scripts
 ```
 
-## Typical workflow
+## Development Setup
 
-1. Build a tree in **Graphical** mode or paste a Boolean expression in **Boolean** mode.
-2. Click **Generate Fault Tree** (from Boolean mode) when needed.
-3. Click **Run Analysis** to populate qualitative, quantitative, and BDD result panels.
-4. Use **Generate BDD** in the BDD section after analysis is available.
+Detailed development and local execution instructions are available in the `/docs` directory.
 
-## Project structure
+## Status
 
-- `frontend/`: dependency-free web UI (`index.html`, `styles.css`, `app.js`)
-- `backend/`: Python analysis and API server
-- `examples/`: sample projects and SBE examples
-- `docs/`: architecture notes and roadmap
-- `scripts/`: local startup scripts for frontend/backend
+FAUTree is under active development and continuous improvement.
 
-## Testing
+## Intellectual Property Notice
 
-Backend tests:
+This software is proprietary and confidential.
 
-```powershell
-python -m pip install pytest
-python -m pytest .\backend\tests
-```
+Copyright © 2026 FAUTree.
 
-## Roadmap
+All rights reserved.
 
-See [docs/roadmap.md](./docs/roadmap.md) for planned improvements.
+The source code is maintained in a private repository and is not publicly distributed.
 
-## License
+## Contact
 
-All Rights Reserved. See [LICENSE](./LICENSE).
+For academic collaboration, demonstrations, or licensing inquiries, please contact:
+
+Mahdi Dibaei Asl
+Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)
+
+Email: [mahdi.dibaei@fau.de](mailto:mahdi.dibaei@fau.de)
