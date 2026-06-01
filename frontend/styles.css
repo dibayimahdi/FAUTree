@@ -12,7 +12,7 @@
   --olive: #536d45;
   --blue: #315f7d;
   --shadow: 0 16px 36px rgba(36, 39, 43, 0.1);
-  --results-pane-height: 220px;
+  --results-pane-height: 320px;
   color-scheme: light;
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
@@ -260,6 +260,25 @@ button {
   gap: 8px;
 }
 
+.tool-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.tool-group {
+  display: grid;
+  gap: 8px;
+}
+
+.tool-group-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .builder-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -303,10 +322,6 @@ button {
   padding: 0 8px;
   white-space: nowrap;
   font-size: 13px;
-}
-
-.edit-actions .danger-button {
-  grid-column: 1 / -1;
 }
 
 .sr-only-input {
@@ -659,18 +674,39 @@ button {
 }
 
 .textual-builder {
-  padding: 0 20px 16px;
+  min-height: 0;
+  margin: 0 20px 16px;
+  padding: 16px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 
 .text-editor-wrap {
   height: 100%;
-  display: grid;
-  grid-template-rows: minmax(260px, 1fr) auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
+.boolean-expression-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.boolean-expression-note code {
+  font-family: Consolas, "Courier New", monospace;
+}
+
 .text-editor-wrap textarea {
-  min-height: 260px;
+  min-height: 0;
+  flex: 1 1 auto;
+  height: auto;
   resize: none;
   padding: 16px;
   font-family: Consolas, "Courier New", monospace;
@@ -751,6 +787,7 @@ button {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  margin-top: auto;
 }
 
 .results-pane {

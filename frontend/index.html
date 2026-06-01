@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FAUTree</title>
-    <link rel="stylesheet" href="./styles.css?v=20260530-custom-order-disabled">
+    <link rel="stylesheet" href="./styles.css?v=20260530-boolean-expression-builder">
   </head>
   <body>
     <div class="app-shell">
@@ -16,11 +16,9 @@
             <p>Fault Tree Analysis</p>
           </div>
         </div>
-        <nav class="top-tabs" aria-label="Primary">
-          <button class="top-tab is-active">Model</button>
-          <button class="top-tab">Analyze</button>
-          <button class="top-tab">BDD</button>
-          <button class="top-tab">Report</button>
+        <nav class="top-tabs" role="tablist" aria-label="Primary">
+          <button class="top-tab is-active" data-top-nav="graphical">Graphical</button>
+          <button class="top-tab" data-top-nav="boolean">Boolean</button>
         </nav>
         <div class="top-actions">
           <button class="quiet-button" id="import-project">Import</button>
@@ -50,23 +48,23 @@
 
         <section class="panel-block">
           <div class="section-heading">
-            <span>Builder</span>
-          </div>
-          <div class="builder-switch" role="tablist" aria-label="Fault tree builder mode">
-            <button class="mode-button is-active" data-builder-mode="graphical">Graphical</button>
-            <button class="mode-button" data-builder-mode="textual">Textual</button>
-          </div>
-        </section>
-
-        <section class="panel-block">
-          <div class="section-heading">
             <span>Tools</span>
           </div>
-          <div class="tool-grid" role="toolbar" aria-label="Fault tree tools">
-            <button class="tool-button is-active" data-tool="basic" title="Basic Event tool (B)">BE</button>
-            <button class="tool-button" data-tool="undeveloped" title="Undeveloped Event tool (U)">UND</button>
-            <button class="tool-button" data-tool="and" title="AND gate tool (A)">AND</button>
-            <button class="tool-button" data-tool="or" title="OR gate tool (O)">OR</button>
+          <div class="tool-groups" role="toolbar" aria-label="Fault tree tools">
+            <div class="tool-group">
+              <p class="tool-group-label">Events</p>
+              <div class="tool-grid">
+                <button class="tool-button is-active" data-tool="basic" title="Basic Event tool (B)">BE</button>
+                <button class="tool-button" data-tool="undeveloped" title="Undeveloped Event tool (U)">UND</button>
+              </div>
+            </div>
+            <div class="tool-group">
+              <p class="tool-group-label">Gates</p>
+              <div class="tool-grid">
+                <button class="tool-button" data-tool="and" title="AND gate tool (A)">AND</button>
+                <button class="tool-button" data-tool="or" title="OR gate tool (O)">OR</button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -102,11 +100,11 @@
             </select>
           </label>
           <div class="edit-actions">
-            <button class="primary-button" id="apply-node-properties" title="Apply current node properties (Ctrl+S)">Apply</button>
             <button class="quiet-button" id="add-child-node" title="Add child to selected node (C)">Add Child</button>
             <button class="quiet-button" id="add-sibling-node" title="Add sibling after selected node (S)">Add Sibling</button>
             <button class="quiet-button" id="move-node-up">Move Left</button>
             <button class="quiet-button" id="move-node-down">Move Right</button>
+            <button class="primary-button" id="apply-node-properties" title="Apply current node properties (Ctrl+S)">Apply</button>
             <button class="quiet-button danger-button" id="delete-node" title="Delete selected node (Delete)">Delete</button>
           </div>
         </section>
@@ -144,11 +142,13 @@
 
         <section class="builder-panel textual-builder" data-builder-panel="textual">
           <div class="text-editor-wrap">
-            <textarea id="fault-tree-text" spellcheck="false"></textarea>
+            <p class="boolean-expression-note">
+              Example: <code>((A /\ B) \/ (C /\ (D \/ E) /\ F))</code>
+            </p>
+            <textarea id="fault-tree-text" spellcheck="false" placeholder="Paste or type a Boolean expression here, for example: ((A /\ B) \/ (C /\ (D \/ E) /\ F))"></textarea>
             <div class="text-actions">
-              <button class="primary-button" id="apply-text-model">Apply Text Model</button>
-              <button class="quiet-button" id="sync-text-model">Sync From Graph</button>
-              <button class="quiet-button" id="reset-text-model">Reset Text</button>
+              <button class="primary-button" id="apply-text-model">Generate Fault Tree</button>
+              <button class="quiet-button" id="reset-text-model">Clear Expression</button>
             </div>
           </div>
         </section>
@@ -311,7 +311,7 @@
           <div class="bdd-action-panel">
             <div class="section-heading">
               <span>BDD View</span>
-              <button class="quiet-button" id="toggle-bdd-workspace">Show BDD</button>
+              <button class="quiet-button" id="toggle-bdd-workspace">Generate BDD</button>
             </div>
           </div>
         </div>
@@ -373,6 +373,6 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260530-custom-order-disabled"></script>
+    <script src="./app.js?v=20260530-boolean-expression-builder"></script>
   </body>
 </html>

@@ -1,11 +1,5 @@
-const defaultTextModel = `System failure = OR(Power supply failure, Control unit failure, Protection subsystem failure)
-Protection subsystem failure = AND(Primary protection failure, Backup protection failure)
-Power supply failure = BASIC(2e-6)
-Control unit failure = BASIC(3e-6)
-Primary protection failure = BASIC(1.5e-6)
-Backup protection failure = BASIC(1.5e-6)`;
-
-const emptyTextModel = `Top event = BASIC(0)`;
+const defaultTextModel = "((A /\\ B) \\/ (C /\\ (D \\/ E) /\\ F))";
+const emptyTextModel = "";
 const analysisApiUrl = "http://localhost:8000/api/analyze/minimal-cut-sets";
 const bddApiUrl = "http://localhost:8000/api/analyze/bdd";
 
@@ -85,7 +79,7 @@ function setResultsPaneHeight(height) {
   const viewportHeight = window.innerHeight || 0;
   const topbarHeight = 72;
   const minHeight = 160;
-  const reservedWorkspaceHeight = 220;
+  const reservedWorkspaceHeight = 320;
   const maxHeight = Math.max(minHeight, viewportHeight - topbarHeight - reservedWorkspaceHeight);
   const clampedHeight = Math.max(minHeight, Math.min(height, maxHeight));
   appShell?.style.setProperty("--results-pane-height", `${clampedHeight}px`);
@@ -612,8 +606,8 @@ function setBuilderMode(mode) {
   });
   document.querySelector("[data-diagram-panel='bdd']").classList.remove("is-active");
   syncBddSettingsVisibility();
-  builderTitle.textContent = mode === "textual" ? "Textual Fault Tree Builder" : "Graphical Fault Tree Builder";
-  statusLine.textContent = mode === "textual" ? "Textual builder ready" : "Graphical builder ready";
+  builderTitle.textContent = mode === "textual" ? "Boolean Expression Builder" : "Graphical Fault Tree Builder";
+  statusLine.textContent = mode === "textual" ? "Boolean expression builder ready." : "Graphical builder ready";
 }
 
 function setDiagramView(view) {
@@ -626,7 +620,7 @@ function setDiagramView(view) {
     document.querySelectorAll("[data-builder-panel]").forEach((panel) => {
       panel.classList.toggle("is-active", panel.dataset.builderPanel === activeBuilderMode);
     });
-    builderTitle.textContent = activeBuilderMode === "textual" ? "Textual Fault Tree Builder" : "Graphical Fault Tree Builder";
+    builderTitle.textContent = activeBuilderMode === "textual" ? "Boolean Expression Builder" : "Graphical Fault Tree Builder";
     statusLine.textContent = "Fault tree view ready.";
     return;
   }
@@ -641,10 +635,35 @@ function setDiagramView(view) {
 }
 
 function syncDiagramButtons() {
-  toggleBddWorkspaceButton.textContent = activeDiagramView === "bdd" ? "Show Fault Tree" : "Show BDD";
+  toggleBddWorkspaceButton.textContent = activeDiagramView === "bdd" ? "Show Fault Tree" : "Generate BDD";
+}
+
+function setActiveTopNav(tabName) {
+  document.querySelectorAll("[data-top-nav]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.topNav === tabName);
+  });
+}
+
+function openTopNav(tabName) {
+  if (tabName === "graphical") {
+    setBuilderMode("graphical");
+    setDiagramView("fault-tree");
+    setActiveTopNav("graphical");
+    return;
+  }
+
+  if (tabName === "boolean") {
+    setDiagramView("fault-tree");
+    setBuilderMode("textual");
+    setActiveTopNav("boolean");
+  }
 }
 
 function toggleBddWorkspaceView() {
+  if (activeDiagramView !== "bdd" && !lastBddGraph) {
+    statusLine.textContent = "Run Analysis first.";
+    return;
+  }
   setDiagramView(activeDiagramView === "bdd" ? "fault-tree" : "bdd");
 }
 
@@ -1084,155 +1103,234 @@ function updateNodeSequence() {
 }
 
 function parseTextModel() {
-  const lines = textArea.value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"));
-
-  if (lines.length === 0) {
-    throw new Error("Text model is empty.");
+  const expression = textArea.value.trim();
+  if (!expression) {
+    return createEmptyModel();
   }
 
-  const seenLabels = new Set();
-  const definitions = lines.map((line, index) => {
-    const parts = line.split("=");
-    if (parts.length !== 2) {
-      throw new Error(`Line ${index + 1}: use "Event = OR(...)", "Event = A ^ B", "Event = BASIC(probability)", or "Event = UNDEVELOPED(probability)".`);
+  const ast = parseBooleanExpression(expression);
+  if (ast.type === "variable") {
+    throw new Error("Use at least one AND or OR operator to create a fault tree.");
+  }
+
+  return buildModelFromBooleanAst(ast);
+}
+
+function parseBooleanExpression(expression) {
+  const tokens = tokenizeBooleanExpression(expression);
+  let position = 0;
+
+  function currentToken() {
+    return tokens[position];
+  }
+
+  function consumeToken(expectedType) {
+    const token = currentToken();
+    if (!token || token.type !== expectedType) {
+      const found = token ? `"${token.value}"` : "end of expression";
+      throw new Error(`Boolean expression error: expected ${expectedType} but found ${found}.`);
     }
-    const label = parts[0].trim();
-    if (!label) {
-      throw new Error(`Line ${index + 1}: event label is missing.`);
+    position += 1;
+    return token;
+  }
+
+  function parsePrimary() {
+    const token = currentToken();
+    if (!token) {
+      throw new Error("Boolean expression error: expression ends unexpectedly.");
     }
-    if (seenLabels.has(label)) {
-      throw new Error(`Line ${index + 1}: duplicate definition for "${label}".`);
+    if (token.type === "identifier") {
+      position += 1;
+      return { type: "variable", name: token.value };
     }
-    seenLabels.add(label);
-    return {
-      label,
-      expression: parseExpression(parts[1].trim(), index + 1),
-    };
+    if (token.type === "lparen") {
+      position += 1;
+      const node = parseOrExpression();
+      consumeToken("rparen");
+      return node;
+    }
+    throw new Error(`Boolean expression error: unexpected token "${token.value}".`);
+  }
+
+  function parseAndExpression() {
+    const children = [parsePrimary()];
+    while (currentToken()?.type === "and") {
+      position += 1;
+      children.push(parsePrimary());
+    }
+    return children.length === 1 ? children[0] : { type: "gate", gate: "AND", children };
+  }
+
+  function parseOrExpression() {
+    const children = [parseAndExpression()];
+    while (currentToken()?.type === "or") {
+      position += 1;
+      children.push(parseAndExpression());
+    }
+    return children.length === 1 ? children[0] : { type: "gate", gate: "OR", children };
+  }
+
+  const ast = parseOrExpression();
+  if (position < tokens.length) {
+    throw new Error(`Boolean expression error: unexpected token "${tokens[position].value}".`);
+  }
+  return normalizeBooleanAst(ast);
+}
+
+function tokenizeBooleanExpression(expression) {
+  const tokens = [];
+  let index = 0;
+
+  while (index < expression.length) {
+    const character = expression[index];
+
+    if (/\s/.test(character)) {
+      index += 1;
+      continue;
+    }
+    if (expression.startsWith("/\\", index)) {
+      tokens.push({ type: "and", value: "/\\" });
+      index += 2;
+      continue;
+    }
+    if (expression.startsWith("\\/", index)) {
+      tokens.push({ type: "or", value: "\\/" });
+      index += 2;
+      continue;
+    }
+    if (character === "(") {
+      tokens.push({ type: "lparen", value: character });
+      index += 1;
+      continue;
+    }
+    if (character === ")") {
+      tokens.push({ type: "rparen", value: character });
+      index += 1;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(character)) {
+      let end = index + 1;
+      while (end < expression.length && /[A-Za-z0-9_]/.test(expression[end])) {
+        end += 1;
+      }
+      tokens.push({ type: "identifier", value: expression.slice(index, end) });
+      index = end;
+      continue;
+    }
+
+    throw new Error(`Boolean expression error: unsupported character "${character}".`);
+  }
+
+  return tokens;
+}
+
+function normalizeBooleanAst(node) {
+  if (node.type !== "gate") {
+    return node;
+  }
+
+  const children = node.children.map(normalizeBooleanAst).flatMap((child) => {
+    return child.type === "gate" && child.gate === node.gate ? child.children : [child];
   });
 
-  const labelToId = new Map();
-  const newModel = { rootId: "top", nodes: {} };
+  return {
+    type: "gate",
+    gate: node.gate,
+    children,
+  };
+}
 
-  function ensureNode(label) {
-    if (!labelToId.has(label)) {
-      const id = labelToId.size === 0 ? "top" : slugId(label, labelToId.size);
-      labelToId.set(label, id);
-      newModel.nodes[id] = {
-        id,
+function buildModelFromBooleanAst(ast) {
+  const nodes = {
+    top: {
+      id: "top",
+      kind: "top_event",
+      label: "Top event",
+      children: [],
+    },
+  };
+  let gateSequence = 0;
+  let eventSequence = 0;
+
+  function createGateId() {
+    gateSequence += 1;
+    return gateSequence === 1 ? "root_gate" : `g${gateSequence}`;
+  }
+
+  function createEventId() {
+    eventSequence += 1;
+    return `e${eventSequence}`;
+  }
+
+  function createNode(node) {
+    if (node.type === "variable") {
+      const eventId = createEventId();
+      nodes[eventId] = {
+        id: eventId,
         kind: "basic_event",
-        label,
-        failureRate: 0.000003,
+        label: node.name,
+        failureRate: 0.001,
         children: [],
       };
+      return eventId;
     }
-    return labelToId.get(label);
+
+    const gateId = createGateId();
+    nodes[gateId] = {
+      id: gateId,
+      kind: "gate",
+      gate: node.gate,
+      label: `${node.gate} gate`,
+      children: node.children.map(createNode),
+    };
+    return gateId;
   }
 
-  definitions.forEach((definition) => ensureNode(definition.label));
-
-  definitions.forEach((definition, index) => {
-    const nodeId = ensureNode(definition.label);
-    const node = newModel.nodes[nodeId];
-
-    if (index === 0) {
-      node.kind = "top_event";
-      node.children = [];
-      delete node.failureRate;
-      delete node.gate;
-
-      if (definition.expression.type === "gate") {
-        const gateId = "root_gate";
-        newModel.nodes[gateId] = {
-          id: gateId,
-          kind: "gate",
-          gate: definition.expression.gate,
-          label: `${definition.expression.gate} gate`,
-          children: definition.expression.children.map((childLabel) => ensureNode(childLabel)),
-        };
-        node.children = [gateId];
-      } else {
-        node.children = [];
-      }
-      return;
-    }
-
-    if (definition.expression.type === "gate") {
-      node.kind = "gate";
-      node.gate = definition.expression.gate;
-      node.children = definition.expression.children.map((childLabel) => ensureNode(childLabel));
-      delete node.failureRate;
-      return;
-    }
-
-    node.kind = definition.expression.type === "undeveloped" ? "undeveloped_event" : "basic_event";
-    node.children = [];
-    node.failureRate = definition.expression.failureRate;
-    delete node.gate;
-  });
-
-  return newModel;
+  nodes.top.children = [createNode(ast)];
+  return {
+    rootId: "top",
+    nodes,
+  };
 }
 
-function parseExpression(expression, lineNumber) {
-  const gateMatch = expression.match(/^(AND|OR)\((.*)\)$/i);
-  if (gateMatch) {
-    const children = gateMatch[2]
-      .split(",")
-      .map((label) => label.trim())
-      .filter(Boolean);
-
-    return {
-      type: "gate",
-      gate: gateMatch[1].toUpperCase(),
-      children,
-    };
+function serializeBooleanNode(nodeIdOrNode, parentGate = null) {
+  const node = typeof nodeIdOrNode === "string" ? model.nodes[nodeIdOrNode] : nodeIdOrNode;
+  if (!node) {
+    return "";
   }
 
-  const basicMatch = expression.match(/^BASIC\((.*)\)$/i);
-  if (basicMatch) {
-    return {
-      type: "basic",
-      failureRate: parseStrictFailureRate(basicMatch[1], lineNumber),
-    };
+  if (node.kind === "basic_event" || node.kind === "undeveloped_event") {
+    return node.label;
   }
 
-  const undevelopedMatch = expression.match(/^UNDEVELOPED\((.*)\)$/i);
-  if (undevelopedMatch) {
-    return {
-      type: "undeveloped",
-      failureRate: parseStrictFailureRate(undevelopedMatch[1], lineNumber),
-    };
+  if (node.kind === "top_event" || node.kind === "intermediate_event") {
+    if (node.children.length === 1) {
+      return serializeBooleanNode(node.children[0], parentGate);
+    }
+    return wrapBooleanExpression(
+      node.children.map((childId) => serializeBooleanNode(childId, "OR")).filter(Boolean).join(" \\/ "),
+      parentGate,
+      "OR"
+    );
   }
 
-  const infixAnd = splitInfixExpression(expression, "^");
-  if (infixAnd.length > 1) {
-    return {
-      type: "gate",
-      gate: "AND",
-      children: infixAnd,
-    };
+  if (node.kind !== "gate") {
+    return "";
   }
 
-  const infixOr = splitInfixExpression(expression, "|");
-  if (infixOr.length > 1) {
-    return {
-      type: "gate",
-      gate: "OR",
-      children: infixOr,
-    };
-  }
-
-  throw new Error(`Line ${lineNumber}: expression must be AND(...), OR(...), A ^ B, A | B, BASIC(probability), or UNDEVELOPED(probability).`);
+  const operator = node.gate === "AND" ? "/\\" : "\\/";
+  const expression = node.children.map((childId) => serializeBooleanNode(childId, node.gate)).filter(Boolean).join(` ${operator} `);
+  return wrapBooleanExpression(expression, parentGate, node.gate);
 }
 
-function splitInfixExpression(expression, operator) {
-  return expression
-    .split(operator)
-    .map((label) => label.trim())
-    .filter(Boolean);
+function wrapBooleanExpression(expression, parentGate, currentGate) {
+  if (!expression) {
+    return "";
+  }
+  if (!parentGate || parentGate === currentGate) {
+    return currentGate === "AND" || currentGate === "OR" ? `(${expression})` : expression;
+  }
+  return `(${expression})`;
 }
 
 function applyTextModel() {
@@ -1243,9 +1341,9 @@ function applyTextModel() {
     selectedNodeId = model.rootId;
     updateNodeSequence();
     renderAll();
-    runAnalysis();
     setBuilderMode("graphical");
-    statusLine.textContent = "Text model applied.";
+    clearAnalysisResults("Run analysis to compute cut sets.");
+    statusLine.textContent = "Fault tree generated from Boolean expression.";
   } catch (error) {
     statusLine.textContent = error.message;
   }
@@ -1258,53 +1356,15 @@ function syncTextFromGraph() {
 function serializeTextModel() {
   const root = model.nodes[model.rootId];
   if (!root || root.children.length === 0) {
-    return `${root?.label || "Top event"} = BASIC(0)`;
+    return "";
   }
 
-  const lines = [];
-  const rootExpression = serializeChildrenAsGate(root);
-  const inlineGateIds = findInlineGateIds();
-  lines.push(`${root.label} = ${rootExpression}`);
-
-  visitTree(model.rootId, (node) => {
-    if (node.kind === "top_event" || inlineGateIds.has(node.id)) {
-      return;
-    }
-    if (node.kind === "intermediate_event") {
-      lines.push(`${node.label} = ${serializeChildrenAsGate(node)}`);
-      return;
-    }
-    if (node.kind === "gate") {
-      lines.push(`${node.label} = ${node.gate}(${node.children.map((childId) => model.nodes[childId]?.label).filter(Boolean).join(", ")})`);
-      return;
-    }
-    if (node.kind === "undeveloped_event") {
-      lines.push(`${node.label} = UNDEVELOPED(${node.failureRate ?? 0})`);
-      return;
-    }
-    lines.push(`${node.label} = BASIC(${node.failureRate ?? 0})`);
-  });
-
-  return uniqueItems(lines).join("\n");
-}
-
-function findInlineGateIds() {
-  return new Set(
-    Object.values(model.nodes)
-      .filter((node) => (node.kind === "top_event" || node.kind === "intermediate_event") && node.children.length === 1 && model.nodes[node.children[0]]?.kind === "gate")
-      .map((node) => node.children[0])
-  );
-}
-
-function serializeChildrenAsGate(node) {
-  if (node.children.length === 1) {
-    const child = model.nodes[node.children[0]];
-    if (child?.kind === "gate") {
-      return `${child.gate}(${child.children.map((childId) => model.nodes[childId]?.label).filter(Boolean).join(", ")})`;
-    }
+  const rootChild = model.nodes[root.children[0]];
+  if (!rootChild) {
+    return "";
   }
 
-  return `OR(${node.children.map((childId) => model.nodes[childId]?.label).filter(Boolean).join(", ")})`;
+  return serializeBooleanNode(rootChild);
 }
 
 function modelToSbe() {
@@ -2272,6 +2332,10 @@ document.querySelectorAll("[data-builder-mode]").forEach((button) => {
   button.addEventListener("click", () => setBuilderMode(button.dataset.builderMode));
 });
 
+document.querySelectorAll("[data-top-nav]").forEach((button) => {
+  button.addEventListener("click", () => openTopNav(button.dataset.topNav));
+});
+
 document.querySelectorAll("[data-result-tab]").forEach((tab) => {
   tab.addEventListener("click", () => {
     setActiveResultTab(tab.dataset.resultTab);
@@ -2317,13 +2381,9 @@ projectTitleInput.addEventListener("keydown", (event) => {
   }
 });
 document.querySelector("#apply-text-model").addEventListener("click", applyTextModel);
-document.querySelector("#sync-text-model").addEventListener("click", () => {
-  syncTextFromGraph();
-  statusLine.textContent = "Text model synchronized from graph.";
-});
 document.querySelector("#reset-text-model").addEventListener("click", () => {
-  textArea.value = defaultTextModel;
-  statusLine.textContent = "Text model reset.";
+  textArea.value = emptyTextModel;
+  statusLine.textContent = "Boolean expression cleared.";
 });
 document.querySelector("#run-analysis").addEventListener("click", runAnalysis);
 toggleBddWorkspaceButton.addEventListener("click", toggleBddWorkspaceView);
