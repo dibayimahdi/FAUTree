@@ -1,33 +1,36 @@
 # FAUTree
 
-FAUTree is a graphical platform for qualitative, quantitative, and BDD-based fault tree analysis.
+FAUTree is a fault tree analysis platform with a graphical editor, Boolean expression builder, and analysis views for qualitative, quantitative, and BDD outputs.
 
-This repository currently contains the Phase 1 foundation:
+This repository is currently in **public beta** and under active development.
 
-- a professional dependency-free frontend shell
-- a lightweight Python backend/API skeleton
-- a first JSON project format for fault tree models
-- example data and architecture documentation
+## Current capabilities
 
-## Run the Phase 1 frontend
+- Graphical fault tree editing with event/gate tools
+- Boolean expression input and conversion to a graphical tree
+- Fault tree export/import (`.fautree.json`) and import of `.sbe`
+- Analysis panels for:
+  - Qualitative results (minimal cut sets)
+  - Quantitative metrics
+  - BDD summaries and BDD workspace view
 
-From the repository root:
+## Quick start
+
+### 1) Start the frontend
+
+From repository root:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start_frontend.ps1
 ```
 
-Then open:
+Open:
 
 ```text
 http://localhost:5173/frontend/
 ```
 
-The frontend shell is intentionally dependency-free for Phase 1 so it runs before npm/React tooling is configured.
-
-## Run the backend skeleton
-
-In a second terminal:
+### 2) Start the backend (separate terminal)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start_backend.ps1
@@ -41,19 +44,34 @@ http://localhost:8000/api/projects/sample
 http://localhost:8000/api/schema
 ```
 
-## Phase 2A editor workflow
+## Typical workflow
 
-In the frontend:
+1. Build a tree in **Graphical** mode or paste a Boolean expression in **Boolean** mode.
+2. Click **Generate Fault Tree** (from Boolean mode) when needed.
+3. Click **Run Analysis** to populate qualitative, quantitative, and BDD result panels.
+4. Use **Generate BDD** in the BDD section after analysis is available.
 
-- Click `+` in the Project panel to start a new empty fault tree with one top event.
-- Rename the project with the Project title field.
-- Select a node, edit its label/type/rate, and click Apply.
-- Choose a child type, then add child or sibling nodes.
-- Use Move Up/Move Down to reorder sibling nodes.
-- Use Export to save a `.fautree.json` project file.
-- Use Import to load a saved FAUTree JSON project.
-- Use Textual mode to edit a tree as lines such as `System failure = OR(A, B)` and `A = BASIC(1e-6)`.
+## Project structure
 
-## Next phases
+- `frontend/`: dependency-free web UI (`index.html`, `styles.css`, `app.js`)
+- `backend/`: Python analysis and API server
+- `examples/`: sample projects and SBE examples
+- `docs/`: architecture notes and roadmap
+- `scripts/`: local startup scripts for frontend/backend
 
-Phase 2 will replace the static canvas with a proper graph editor and connect the UI to the backend model. The recommended target stack remains React + TypeScript + React Flow for the frontend and Python analysis modules behind an API.
+## Testing
+
+Backend tests:
+
+```powershell
+python -m pip install pytest
+python -m pytest .\backend\tests
+```
+
+## Roadmap
+
+See [docs/roadmap.md](./docs/roadmap.md) for planned improvements.
+
+## License
+
+All Rights Reserved. See [LICENSE](./LICENSE).
