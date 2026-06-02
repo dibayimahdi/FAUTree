@@ -15,6 +15,7 @@ let invalidNodeIds = new Set();
 let undoStack = [];
 let redoStack = [];
 let lastBddGraph = null;
+let lastAnalysisSnapshot = null;
 let resultsPaneResizeState = null;
 let customBddOrder = [];
 
@@ -436,16 +437,12 @@ function computeDepth(nodeId) {
   return 1 + Math.max(...node.children.map((childId) => computeDepth(childId)));
 }
 
-function layoutTree() {
+function measureTreeLayout() {
   const leafCount = computeLeafCount(model.rootId);
   const maxDepth = computeDepth(model.rootId);
   const stageWidth = Math.max(760, leafCount * 210);
   const stageHeight = Math.max(560, 120 + maxDepth * 130);
   const positions = {};
-
-  faultStage.style.width = `${stageWidth}px`;
-  faultStage.style.height = `${stageHeight}px`;
-  faultLines.setAttribute("viewBox", `0 0 ${stageWidth} ${stageHeight}`);
 
   function assign(nodeId, depth, left, width) {
     const node = model.nodes[nodeId];
@@ -472,7 +469,19 @@ function layoutTree() {
   }
 
   assign(model.rootId, 0, 30, stageWidth - 60);
-  return positions;
+  return {
+    stageWidth,
+    stageHeight,
+    positions,
+  };
+}
+
+function layoutTree() {
+  const layout = measureTreeLayout();
+  faultStage.style.width = `${layout.stageWidth}px`;
+  faultStage.style.height = `${layout.stageHeight}px`;
+  faultLines.setAttribute("viewBox", `0 0 ${layout.stageWidth} ${layout.stageHeight}`);
+  return layout.positions;
 }
 
 function createLinePath(parent, child) {
@@ -951,7 +960,7 @@ function closeShortcutsModal() {
 
 function openExportModal() {
   exportFilenameInput.value = safeFilename(projectName);
-  exportTypeSelect.value = "json";
+  exportTypeSelect.value = "pdf";
   updateExportExtensionPreview();
   exportModal.hidden = false;
   exportFilenameInput.focus();
@@ -963,7 +972,16 @@ function closeExportModal() {
 }
 
 function updateExportExtensionPreview() {
-  exportExtensionPreview.textContent = exportTypeSelect.value === "sbe" ? ".sbe" : ".json";
+  const extensionByType = {
+    pdf: ".pdf",
+    json: ".json",
+    sbe: ".sbe",
+    "fault-tree-svg": ".svg",
+    "fault-tree-png": ".png",
+    "bdd-svg": ".svg",
+    "bdd-png": ".png",
+  };
+  exportExtensionPreview.textContent = extensionByType[exportTypeSelect.value] || ".json";
 }
 
 function isTypingTarget(target) {
@@ -1474,8 +1492,33 @@ async function confirmProjectExport() {
   const filenameBase = safeFilename(exportFilenameInput.value || projectName);
   const exportType = exportTypeSelect.value;
 
+  if (exportType === "pdf") {
+    await exportPdfReport(filenameBase);
+    return;
+  }
+
   if (exportType === "sbe") {
     await exportSbeProject(filenameBase);
+    return;
+  }
+
+  if (exportType === "fault-tree-svg") {
+    await exportFaultTreeSvg(filenameBase);
+    return;
+  }
+
+  if (exportType === "fault-tree-png") {
+    await exportFaultTreePng(filenameBase);
+    return;
+  }
+
+  if (exportType === "bdd-svg") {
+    await exportBddSvg(filenameBase);
+    return;
+  }
+
+  if (exportType === "bdd-png") {
+    await exportBddPng(filenameBase);
     return;
   }
 
@@ -1519,7 +1562,10 @@ async function saveTextFile({ filename, content, type }) {
 }
 
 function downloadTextFile(filename, content, type) {
-  const blob = new Blob([content], { type });
+  downloadBlob(filename, new Blob([content], { type }));
+}
+
+function downloadBlob(filename, blob) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = filename;
@@ -1527,6 +1573,407 @@ function downloadTextFile(filename, content, type) {
   link.click();
   link.remove();
   URL.revokeObjectURL(link.href);
+}
+
+function createSvgNode(tagName) {
+  return document.createElementNS("http://www.w3.org/2000/svg", tagName);
+}
+
+function serializeSvg(svg) {
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(svg)}`;
+}
+
+function wrapSvgText(text, maxCharacters = 18) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return [""];
+  }
+
+  const lines = [];
+  let current = "";
+  words.forEach((word) => {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharacters || current.length === 0) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  });
+  if (current) {
+    lines.push(current);
+  }
+  return lines.slice(0, 3);
+}
+
+function addSvgMultilineText(target, lines, x, y, className, lineHeight = 16) {
+  const text = createSvgNode("text");
+  text.setAttribute("x", x);
+  text.setAttribute("y", y);
+  text.setAttribute("class", className);
+  text.setAttribute("text-anchor", "middle");
+
+  lines.forEach((line, index) => {
+    const tspan = createSvgNode("tspan");
+    tspan.setAttribute("x", x);
+    tspan.setAttribute("dy", index === 0 ? "0" : String(lineHeight));
+    tspan.textContent = line;
+    text.appendChild(tspan);
+  });
+
+  target.appendChild(text);
+}
+
+function buildFaultTreeExportSvg() {
+  const layout = measureTreeLayout();
+  const svg = createSvgNode("svg");
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svg.setAttribute("width", layout.stageWidth);
+  svg.setAttribute("height", layout.stageHeight);
+  svg.setAttribute("viewBox", `0 0 ${layout.stageWidth} ${layout.stageHeight}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${projectName} fault tree`);
+
+  const style = createSvgNode("style");
+  style.textContent = `
+    .export-bg { fill: #fffdf8; }
+    .fault-link { fill: none; stroke: #6b7280; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .event-card { fill: #fffaf0; stroke: #d7b36a; stroke-width: 2; }
+    .event-card.top-event { fill: #fff0eb; stroke: #b42318; }
+    .event-card.intermediate-event { fill: #fff7ed; stroke: #ea580c; }
+    .event-card.undeveloped-event { fill: #f5f3ff; stroke: #7c3aed; }
+    .event-kind { fill: #8a5a14; font: 600 11px "Segoe UI", Arial, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+    .event-label { fill: #1f2937; font: 700 15px "Segoe UI", Arial, sans-serif; }
+    .event-rate { fill: #475467; font: 500 11px "Segoe UI", Arial, sans-serif; }
+    .gate-shape { fill: #ffffff; stroke: #344054; stroke-width: 2.4; }
+    .gate-label { fill: #344054; font: 700 12px "Segoe UI", Arial, sans-serif; letter-spacing: 0.08em; }
+  `;
+  svg.append(style);
+
+  const background = createSvgNode("rect");
+  background.setAttribute("class", "export-bg");
+  background.setAttribute("width", layout.stageWidth);
+  background.setAttribute("height", layout.stageHeight);
+  svg.append(background);
+
+  visitTree(model.rootId, (node) => {
+    node.children.forEach((childId) => {
+      const path = createSvgNode("path");
+      path.setAttribute("class", "fault-link");
+      path.setAttribute("d", createLinePath(layout.positions[node.id], layout.positions[childId]));
+      svg.append(path);
+    });
+  });
+
+  visitTree(model.rootId, (node) => {
+    const position = layout.positions[node.id];
+    if (!position) {
+      return;
+    }
+
+    if (node.kind === "gate") {
+      const path = createSvgNode("path");
+      path.setAttribute("class", "gate-shape");
+      if (node.gate === "AND") {
+        path.setAttribute(
+          "d",
+          `M ${position.centerX - 22} ${position.y + 60} L ${position.centerX - 22} ${position.y + 26} C ${position.centerX - 22} ${position.y + 8} ${position.centerX - 10} ${position.y + 4} ${position.centerX} ${position.y + 4} C ${position.centerX + 10} ${position.y + 4} ${position.centerX + 22} ${position.y + 8} ${position.centerX + 22} ${position.y + 26} L ${position.centerX + 22} ${position.y + 60} Z`
+        );
+      } else {
+        path.setAttribute(
+          "d",
+          `M ${position.centerX - 28} ${position.y + 62} C ${position.centerX - 20} ${position.y + 36} ${position.centerX - 18} ${position.y + 16} ${position.centerX} ${position.y + 4} C ${position.centerX + 18} ${position.y + 16} ${position.centerX + 20} ${position.y + 36} ${position.centerX + 28} ${position.y + 62} C ${position.centerX + 10} ${position.y + 52} ${position.centerX - 10} ${position.y + 52} ${position.centerX - 28} ${position.y + 62} Z`
+        );
+      }
+      svg.append(path);
+
+      const label = createSvgNode("text");
+      label.setAttribute("x", position.centerX);
+      label.setAttribute("y", position.y + 82);
+      label.setAttribute("class", "gate-label");
+      label.setAttribute("text-anchor", "middle");
+      label.textContent = node.gate;
+      svg.append(label);
+      return;
+    }
+
+    const card = createSvgNode("rect");
+    card.setAttribute("x", position.x);
+    card.setAttribute("y", position.y);
+    card.setAttribute("width", position.width);
+    card.setAttribute("height", position.height);
+    card.setAttribute("rx", node.kind === "undeveloped_event" ? "24" : "18");
+    card.setAttribute("ry", node.kind === "undeveloped_event" ? "24" : "18");
+    card.setAttribute("class", `event-card ${node.kind.replace(/_/g, "-")}`);
+    svg.append(card);
+
+    addSvgMultilineText(svg, [nodeKindLabel(node)], position.centerX, position.y + 18, "event-kind", 14);
+    addSvgMultilineText(
+      svg,
+      wrapSvgText(node.label, node.kind === "top_event" ? 24 : 18),
+      position.centerX,
+      position.y + 40,
+      "event-label",
+      18
+    );
+
+    if (node.failureRate) {
+      addSvgMultilineText(svg, [`p = ${formatNumber(node.failureRate)}`], position.centerX, position.y + position.height - 14, "event-rate", 14);
+    }
+  });
+
+  return {
+    svg,
+    width: layout.stageWidth,
+    height: layout.stageHeight,
+  };
+}
+
+function buildBddExportSvg() {
+  if (!lastBddGraph) {
+    throw new Error("Run BDD analysis before exporting the BDD diagram.");
+  }
+
+  const svg = createSvgNode("svg");
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  renderBddGraph(lastBddGraph, svg, { width: 760, minHeight: 360 });
+
+  const height = Number(svg.getAttribute("viewBox")?.split(" ")[3] || "360");
+  svg.setAttribute("width", "760");
+  svg.setAttribute("height", String(height));
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${projectName} binary decision diagram`);
+
+  const style = createSvgNode("style");
+  style.textContent = `
+    .bdd-edge { stroke: #98a2b3; stroke-width: 2.6; fill: none; }
+    .bdd-edge.is-high { stroke: #16a34a; }
+    .bdd-edge.is-low { stroke: #dc2626; stroke-dasharray: 8 6; }
+    .bdd-edge-label { fill: #344054; font: 700 11px "Segoe UI", Arial, sans-serif; text-anchor: middle; }
+    .bdd-node circle, .bdd-node rect { fill: #fffdf8; stroke: #344054; stroke-width: 2.4; }
+    .bdd-node.is-terminal rect { fill: #ecfdf3; stroke: #16a34a; }
+    .bdd-node text { fill: #111827; font: 700 12px "Segoe UI", Arial, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+  `;
+  svg.insertBefore(style, svg.firstChild);
+
+  return {
+    svg,
+    width: 760,
+    height,
+  };
+}
+
+async function svgToPngBlob(svgMarkup, width, height) {
+  return new Promise((resolve, reject) => {
+    const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width));
+      canvas.height = Math.max(1, Math.round(height));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        URL.revokeObjectURL(url);
+        reject(new Error("PNG export is not available in this browser."));
+        return;
+      }
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(url);
+        if (!blob) {
+          reject(new Error("PNG export failed."));
+          return;
+        }
+        resolve(blob);
+      }, "image/png");
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not render SVG for PNG export."));
+    };
+    image.src = url;
+  });
+}
+
+function createAnalysisSnapshotForExport() {
+  if (lastAnalysisSnapshot) {
+    return lastAnalysisSnapshot;
+  }
+
+  const validationErrors = validateModelForAnalysis();
+  if (validationErrors.length > 0) {
+    throw new Error(validationErrors[0]);
+  }
+
+  const cutSets = minimizeCutSets(computeCutSets(model.rootId)).map((events) => ({
+    events,
+    order: events.length,
+  }));
+  const topProbability = cutSets.reduce(
+    (total, cutSet) => total + cutSet.events.reduce((product, label) => product * probabilityForLabel(label), 1),
+    0
+  );
+
+  return {
+    cutSets,
+    topProbability: Math.min(topProbability, 1),
+    analysisDuration: null,
+    generatedAt: new Date().toISOString(),
+    engine: "Local export fallback",
+  };
+}
+
+function buildPdfReportHtml() {
+  const analysis = createAnalysisSnapshotForExport();
+  const faultTree = buildFaultTreeExportSvg();
+  const faultTreeDataUrl = URL.createObjectURL(new Blob([serializeSvg(faultTree.svg)], { type: "image/svg+xml;charset=utf-8" }));
+  const dominant = findDominantCutSet(analysis.cutSets || []);
+  const repeatedEvents = getRepeatedBasicEventLabels();
+  const exportedAt = new Date().toLocaleString();
+  const rows = (analysis.cutSets || [])
+    .map((cutSet, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>{ ${cutSet.events.map(escapeHtml).join(", ")} }</td>
+        <td>${cutSet.order}</td>
+      </tr>
+    `)
+    .join("");
+
+  return {
+    html: `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <title>${escapeHtml(projectName)} Report</title>
+          <style>
+            @page { size: A4 portrait; margin: 14mm; }
+            body { font-family: "Segoe UI", Arial, sans-serif; color: #1f2937; margin: 0; }
+            h1, h2 { margin: 0 0 10px; }
+            p { margin: 0; }
+            .header { margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb; }
+            .header p { color: #475467; margin-top: 4px; }
+            .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 18px; }
+            .meta-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; background: #fffdf8; }
+            .meta-card strong { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a5a14; margin-bottom: 4px; }
+            .diagram { border: 1px solid #e5e7eb; border-radius: 14px; padding: 10px; background: white; page-break-inside: avoid; text-align: center; }
+            .diagram img { width: auto; max-width: 100%; max-height: 42vh; height: auto; display: inline-block; object-fit: contain; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+            th, td { border: 1px solid #d0d5dd; padding: 8px 10px; text-align: left; vertical-align: top; }
+            th { background: #f8fafc; }
+            .section { margin-top: 20px; page-break-inside: avoid; }
+            .note { color: #667085; font-size: 11px; margin-top: 8px; }
+          </style>
+        </head>
+        <body>
+          <section class="header">
+            <h1>${escapeHtml(projectName)}</h1>
+            <p>FAUTree analysis export generated on ${escapeHtml(exportedAt)}</p>
+          </section>
+          <section class="meta">
+            <div class="meta-card"><strong>Basic Events</strong><span>${getLeafEventNodes().length}</span></div>
+            <div class="meta-card"><strong>Minimal Cut Sets</strong><span>${(analysis.cutSets || []).length}</span></div>
+            <div class="meta-card"><strong>Top Probability</strong><span>${formatNumber(analysis.topProbability || 0)}</span></div>
+            <div class="meta-card"><strong>Minimum Order</strong><span>${(analysis.cutSets || []).length ? Math.min(...analysis.cutSets.map((cutSet) => cutSet.order)) : "none"}</span></div>
+            <div class="meta-card"><strong>Repeated Events</strong><span>${repeatedEvents.length}</span></div>
+            <div class="meta-card"><strong>Dominant Cut Set</strong><span>${dominant ? `{ ${escapeHtml(dominant.events.join(", "))} }` : "none"}</span></div>
+          </section>
+          <section class="section">
+            <h2>Fault Tree</h2>
+            <div class="diagram">
+              <img src="${faultTreeDataUrl}" alt="Fault tree diagram">
+            </div>
+            <p class="note">The diagram is scaled to fit the page while preserving aspect ratio.</p>
+          </section>
+          <section class="section">
+            <h2>Minimal Cut Sets</h2>
+            <table>
+              <thead>
+                <tr><th>#</th><th>Events</th><th>Order</th></tr>
+              </thead>
+              <tbody>
+                ${rows || '<tr><td colspan="3">No cut sets available.</td></tr>'}
+              </tbody>
+            </table>
+            <p class="note">Analysis engine: ${escapeHtml(analysis.engine || "Python backend")}</p>
+          </section>
+        </body>
+      </html>
+    `,
+    revoke() {
+      URL.revokeObjectURL(faultTreeDataUrl);
+    },
+  };
+}
+
+async function exportPdfReport(filenameBase = safeFilename(projectName)) {
+  try {
+    const report = buildPdfReportHtml();
+    const reportWindow = window.open("", "_blank");
+    if (!reportWindow) {
+      report.revoke();
+      throw new Error("Popup blocked. Allow popups to open the PDF print preview.");
+    }
+    reportWindow.onload = () => {
+      reportWindow.document.title = `${filenameBase}.pdf`;
+      reportWindow.focus();
+      reportWindow.print();
+      report.revoke();
+    };
+    reportWindow.document.open();
+    reportWindow.document.write(report.html);
+    reportWindow.document.close();
+    closeExportModal();
+    statusLine.textContent = "PDF report opened in the browser print dialog.";
+  } catch (error) {
+    statusLine.textContent = error.message;
+  }
+}
+
+async function exportFaultTreeSvg(filenameBase = safeFilename(projectName)) {
+  const asset = buildFaultTreeExportSvg();
+  downloadTextFile(`${filenameBase}-fault-tree.svg`, serializeSvg(asset.svg), "image/svg+xml;charset=utf-8");
+  closeExportModal();
+  statusLine.textContent = "Fault tree exported as SVG.";
+}
+
+async function exportFaultTreePng(filenameBase = safeFilename(projectName)) {
+  try {
+    const asset = buildFaultTreeExportSvg();
+    const blob = await svgToPngBlob(serializeSvg(asset.svg), asset.width, asset.height);
+    downloadBlob(`${filenameBase}-fault-tree.png`, blob);
+    closeExportModal();
+    statusLine.textContent = "Fault tree exported as PNG.";
+  } catch (error) {
+    statusLine.textContent = error.message;
+  }
+}
+
+async function exportBddSvg(filenameBase = safeFilename(projectName)) {
+  try {
+    const asset = buildBddExportSvg();
+    downloadTextFile(`${filenameBase}-bdd.svg`, serializeSvg(asset.svg), "image/svg+xml;charset=utf-8");
+    closeExportModal();
+    statusLine.textContent = "BDD exported as SVG.";
+  } catch (error) {
+    statusLine.textContent = error.message;
+  }
+}
+
+async function exportBddPng(filenameBase = safeFilename(projectName)) {
+  try {
+    const asset = buildBddExportSvg();
+    const blob = await svgToPngBlob(serializeSvg(asset.svg), asset.width, asset.height);
+    downloadBlob(`${filenameBase}-bdd.png`, blob);
+    closeExportModal();
+    statusLine.textContent = "BDD exported as PNG.";
+  } catch (error) {
+    statusLine.textContent = error.message;
+  }
 }
 
 function modelToProjectJson() {
@@ -1900,6 +2347,7 @@ function minimizeCutSets(cutSets) {
 }
 
 function clearAnalysisResults(message) {
+  lastAnalysisSnapshot = null;
   qualitativeTableBody.innerHTML = `
     <tr>
       <td colspan="3">${escapeHtml(message)}</td>
@@ -1989,6 +2437,14 @@ async function runAnalysis() {
     return total + (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label), 1);
   }, 0);
 
+  lastAnalysisSnapshot = {
+    cutSets,
+    topProbability: Math.min(topProbability, 1),
+    analysisDuration,
+    generatedAt: new Date().toISOString(),
+    engine: "Python backend",
+  };
+
   metricMissionTime.textContent = "Rare-event approximation";
   metricTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
   metricVariableCount.textContent = String(getLeafEventNodes().length);
@@ -2031,35 +2487,162 @@ function renderBddResults(bdd) {
   renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 760, minHeight: 360 });
 }
 
+function compareBddNodes(left, right) {
+  if (left.kind !== right.kind) {
+    return left.kind === "terminal" ? 1 : -1;
+  }
+
+  return String(left.label).localeCompare(String(right.label));
+}
+
+function getBddBranchBias(branch, reverse = false) {
+  const bias = branch === "1" ? 96 : -96;
+  return reverse ? -bias : bias;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function buildBddOrderingState(graph) {
+  const levels = new Map();
+  const incoming = new Map();
+  const outgoing = new Map();
+
+  graph.nodes.forEach((node) => {
+    if (!levels.has(node.level)) {
+      levels.set(node.level, []);
+    }
+    levels.get(node.level).push(node);
+    incoming.set(node.id, []);
+    outgoing.set(node.id, []);
+  });
+
+  graph.edges.forEach((edge) => {
+    if (!incoming.has(edge.target) || !outgoing.has(edge.source)) {
+      return;
+    }
+    incoming.get(edge.target).push(edge);
+    outgoing.get(edge.source).push(edge);
+  });
+
+  [...levels.values()].forEach((nodes) => nodes.sort(compareBddNodes));
+
+  return {
+    levels,
+    incoming,
+    outgoing,
+    maxLevel: Math.max(...graph.nodes.map((node) => node.level)),
+  };
+}
+
+function scoreBddNode(node, references, positions, reverse = false) {
+  const refs = references.get(node.id) || [];
+  if (refs.length === 0) {
+    return positions.get(node.id)?.x ?? 0;
+  }
+
+  const sum = refs.reduce((total, edge) => {
+    const relatedId = reverse ? edge.target : edge.source;
+    const relatedPosition = positions.get(relatedId);
+    if (!relatedPosition) {
+      return total;
+    }
+    return total + relatedPosition.x + getBddBranchBias(edge.branch, reverse);
+  }, 0);
+
+  return sum / refs.length;
+}
+
+function orderBddLevel(nodes, references, positions, reverse = false) {
+  return [...nodes].sort((left, right) => {
+    const leftScore = scoreBddNode(left, references, positions, reverse);
+    const rightScore = scoreBddNode(right, references, positions, reverse);
+    if (leftScore === rightScore) {
+      return compareBddNodes(left, right);
+    }
+    return leftScore - rightScore;
+  });
+}
+
 function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
   target.innerHTML = "";
   if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
     return;
   }
 
-  const width = options.width || 760;
+  const ordering = buildBddOrderingState(graph);
+  const levelGap = 84;
+  const nodeGap = 224;
+  const marginX = 84;
+  const baseWidth = options.width || 760;
   const minHeight = options.minHeight || 320;
-  const height = Math.max(minHeight, (Math.max(...graph.nodes.map((node) => node.level)) + 1) * 92);
+  const maxNodesPerLevel = Math.max(...[...ordering.levels.values()].map((nodes) => nodes.length), 1);
+  const width = Math.max(baseWidth, marginX * 2 + Math.max(0, maxNodesPerLevel - 1) * nodeGap + 160);
+  const height = Math.max(minHeight, (ordering.maxLevel + 1) * levelGap + 60);
   target.setAttribute("viewBox", `0 0 ${width} ${height}`);
-
-  const levels = new Map();
-  graph.nodes.forEach((node) => {
-    if (!levels.has(node.level)) {
-      levels.set(node.level, []);
-    }
-    levels.get(node.level).push(node);
-  });
+  target.setAttribute("width", String(width));
+  target.setAttribute("height", String(height));
+  target.style.width = `${width}px`;
+  target.style.height = `${height}px`;
 
   const positions = new Map();
-  [...levels.entries()].forEach(([level, nodes]) => {
-    const gap = width / (nodes.length + 1);
+  ordering.levels.forEach((nodes, level) => {
+    const levelWidth = Math.max(width - marginX * 2, Math.max(0, nodes.length - 1) * nodeGap);
+    const gap = nodes.length > 1 ? levelWidth / (nodes.length - 1) : 0;
+    const startX = nodes.length > 1 ? marginX : Math.round(width / 2);
     nodes.forEach((node, index) => {
+      const plannedX = nodes.length === 1
+        ? scoreBddNode(node, ordering.incoming, positions, false)
+        : startX + gap * index;
       positions.set(node.id, {
-        x: Math.round(gap * (index + 1)),
-        y: 46 + level * 84,
+        x: Math.round(clamp(plannedX, marginX, width - marginX)),
+        y: 46 + level * levelGap,
       });
     });
   });
+
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    for (let level = 1; level <= ordering.maxLevel; level += 1) {
+      const nodes = ordering.levels.get(level);
+      if (!nodes) {
+        continue;
+      }
+      const ordered = orderBddLevel(nodes, ordering.incoming, positions, false);
+      const levelWidth = Math.max(width - marginX * 2, Math.max(0, ordered.length - 1) * nodeGap);
+      const gap = ordered.length > 1 ? levelWidth / (ordered.length - 1) : 0;
+      const startX = ordered.length > 1 ? marginX : Math.round(width / 2);
+      ordered.forEach((node, index) => {
+        const plannedX = ordered.length === 1
+          ? scoreBddNode(node, ordering.incoming, positions, false)
+          : startX + gap * index;
+        positions.set(node.id, {
+          x: Math.round(clamp(plannedX, marginX, width - marginX)),
+          y: 46 + level * levelGap,
+        });
+      });
+    }
+
+    for (let level = ordering.maxLevel - 1; level >= 0; level -= 1) {
+      const nodes = ordering.levels.get(level);
+      if (!nodes) {
+        continue;
+      }
+      const ordered = orderBddLevel(nodes, ordering.outgoing, positions, true);
+      const levelWidth = Math.max(width - marginX * 2, Math.max(0, ordered.length - 1) * nodeGap);
+      const gap = ordered.length > 1 ? levelWidth / (ordered.length - 1) : 0;
+      const startX = ordered.length > 1 ? marginX : Math.round(width / 2);
+      ordered.forEach((node, index) => {
+        const plannedX = ordered.length === 1
+          ? scoreBddNode(node, ordering.outgoing, positions, true)
+          : startX + gap * index;
+        positions.set(node.id, {
+          x: Math.round(clamp(plannedX, marginX, width - marginX)),
+          y: 46 + level * levelGap,
+        });
+      });
+    }
+  }
 
   [...graph.edges]
     .sort((left, right) => {
@@ -2069,26 +2652,26 @@ function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
       return left.branch === "1" ? -1 : 1;
     })
     .forEach((edge) => {
-    const start = positions.get(edge.source);
-    const end = positions.get(edge.target);
-    if (!start || !end) {
-      return;
-    }
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", start.x);
-    line.setAttribute("y1", start.y + 18);
-    line.setAttribute("x2", end.x);
-    line.setAttribute("y2", end.y - 18);
-    line.setAttribute("class", `bdd-edge ${edge.branch === "1" ? "is-high" : "is-low"}`);
-    target.appendChild(line);
+      const start = positions.get(edge.source);
+      const end = positions.get(edge.target);
+      if (!start || !end) {
+        return;
+      }
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", start.x);
+      line.setAttribute("y1", start.y + 18);
+      line.setAttribute("x2", end.x);
+      line.setAttribute("y2", end.y - 18);
+      line.setAttribute("class", `bdd-edge ${edge.branch === "1" ? "is-high" : "is-low"}`);
+      target.appendChild(line);
 
-    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", Math.round((start.x + end.x) / 2));
-    label.setAttribute("y", Math.round((start.y + end.y) / 2) - 4);
-    label.setAttribute("class", "bdd-edge-label");
-    label.textContent = edge.branch;
-    target.appendChild(label);
-  });
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", Math.round((start.x + end.x) / 2));
+      label.setAttribute("y", Math.round((start.y + end.y) / 2) - 4);
+      label.setAttribute("class", "bdd-edge-label");
+      label.textContent = edge.branch;
+      target.appendChild(label);
+    });
 
   graph.nodes.forEach((node) => {
     const position = positions.get(node.id);
