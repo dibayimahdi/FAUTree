@@ -239,10 +239,13 @@ class BDDAnalyzer:
         return node
 
     def _graph_payload(self, manager: BDDManager, root: int) -> dict | None:
-        if len(manager.nodes) > 80:
+        reachable = self._reachable_bdd_ids(manager, root)
+        # Use the drawable graph size, not the manager's internal temporary node
+        # count. Some valid formulas create many intermediate nodes that reduce
+        # to a much smaller BDD.
+        if len(reachable) > 1000:
             return None
 
-        reachable = self._reachable_bdd_ids(manager, root)
         level_counts: dict[int, int] = {}
         graph_nodes = []
         for node_id in sorted(reachable, key=lambda item: (self._bdd_level(manager, item), item)):

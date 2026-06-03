@@ -15,6 +15,7 @@ let invalidNodeIds = new Set();
 let undoStack = [];
 let redoStack = [];
 let lastBddGraph = null;
+let lastBddAnalysis = null;
 let lastAnalysisSnapshot = null;
 let resultsPaneResizeState = null;
 let customBddOrder = [];
@@ -61,7 +62,8 @@ const closeExportButton = document.querySelector("#close-export");
 const cancelExportButton = document.querySelector("#cancel-export");
 const confirmExportButton = document.querySelector("#confirm-export");
 const exportFilenameInput = document.querySelector("#export-filename-input");
-const exportTypeSelect = document.querySelector("#export-type-select");
+const exportTargetSelect = document.querySelector("#export-target-select");
+const exportFormatSelect = document.querySelector("#export-format-select");
 const exportExtensionPreview = document.querySelector("#export-extension-preview");
 const summaryCutSetCount = document.querySelector("#summary-cut-set-count");
 const summaryMinOrder = document.querySelector("#summary-min-order");
@@ -640,7 +642,7 @@ function setDiagramView(view) {
   });
   document.querySelector("[data-diagram-panel='bdd']").classList.add("is-active");
   builderTitle.textContent = "Binary Decision Diagram";
-  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 760, minHeight: 360 });
+  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 3000, minHeight: 360 });
   statusLine.textContent = lastBddGraph ? "BDD view ready." : "Run analysis to create the BDD.";
 }
 
@@ -669,12 +671,21 @@ function openTopNav(tabName) {
   }
 }
 
-function toggleBddWorkspaceView() {
-  if (activeDiagramView !== "bdd" && !lastBddGraph) {
-    statusLine.textContent = "Run Analysis first.";
+async function toggleBddWorkspaceView() {
+  if (activeDiagramView === "bdd") {
+    setDiagramView("fault-tree");
     return;
   }
-  setDiagramView(activeDiagramView === "bdd" ? "fault-tree" : "bdd");
+
+  if (!lastBddGraph) {
+    const created = await generateBddForCurrentModel();
+    if (!created) {
+      return;
+    }
+  }
+
+  setActiveResultTab("bdd");
+  setDiagramView("bdd");
 }
 
 function setProjectName(name) {
@@ -960,7 +971,9 @@ function closeShortcutsModal() {
 
 function openExportModal() {
   exportFilenameInput.value = safeFilename(projectName);
-  exportTypeSelect.value = "pdf";
+  exportTargetSelect.value = "fault-tree";
+  exportFormatSelect.value = "pdf";
+  updateExportFormatOptions();
   updateExportExtensionPreview();
   exportModal.hidden = false;
   exportFilenameInput.focus();
@@ -972,16 +985,39 @@ function closeExportModal() {
 }
 
 function updateExportExtensionPreview() {
-  const extensionByType = {
+  const extensionByFormat = {
     pdf: ".pdf",
+    svg: ".svg",
+    png: ".png",
     json: ".json",
     sbe: ".sbe",
-    "fault-tree-svg": ".svg",
-    "fault-tree-png": ".png",
-    "bdd-svg": ".svg",
-    "bdd-png": ".png",
   };
-  exportExtensionPreview.textContent = extensionByType[exportTypeSelect.value] || ".json";
+  exportExtensionPreview.textContent = extensionByFormat[exportFormatSelect.value] || ".pdf";
+}
+
+function getExportFormatOptions(target) {
+  if (target === "project") {
+    return [
+      { value: "json", label: "FAUTree JSON (.json)" },
+      { value: "sbe", label: "XFTA SBE (.sbe)" },
+    ];
+  }
+
+  return [
+    { value: "pdf", label: "PDF (.pdf)" },
+    { value: "svg", label: "SVG (.svg)" },
+    { value: "png", label: "PNG (.png)" },
+  ];
+}
+
+function updateExportFormatOptions() {
+  const currentValue = exportFormatSelect.value;
+  const options = getExportFormatOptions(exportTargetSelect.value);
+  exportFormatSelect.innerHTML = options
+    .map((option) => `<option value="${option.value}">${option.label}</option>`)
+    .join("");
+  exportFormatSelect.value = options.some((option) => option.value === currentValue) ? currentValue : options[0].value;
+  updateExportExtensionPreview();
 }
 
 function isTypingTarget(target) {
@@ -1490,39 +1526,38 @@ function exportProject() {
 
 async function confirmProjectExport() {
   const filenameBase = safeFilename(exportFilenameInput.value || projectName);
-  const exportType = exportTypeSelect.value;
+  const target = exportTargetSelect.value;
+  const format = exportFormatSelect.value;
 
-  if (exportType === "pdf") {
-    await exportPdfReport(filenameBase);
+  if (target === "project") {
+    if (format === "json") {
+      await exportJsonProject(filenameBase);
+      return;
+    }
+    if (format === "sbe") {
+      await exportSbeProject(filenameBase);
+      return;
+    }
+    await exportJsonProject(filenameBase);
     return;
   }
 
-  if (exportType === "sbe") {
-    await exportSbeProject(filenameBase);
+  if (format === "pdf") {
+    await exportDiagramPdf(target, filenameBase);
     return;
   }
 
-  if (exportType === "fault-tree-svg") {
-    await exportFaultTreeSvg(filenameBase);
+  if (format === "svg") {
+    await exportDiagramSvg(target, filenameBase);
     return;
   }
 
-  if (exportType === "fault-tree-png") {
-    await exportFaultTreePng(filenameBase);
+  if (format === "png") {
+    await exportDiagramPng(target, filenameBase);
     return;
   }
 
-  if (exportType === "bdd-svg") {
-    await exportBddSvg(filenameBase);
-    return;
-  }
-
-  if (exportType === "bdd-png") {
-    await exportBddPng(filenameBase);
-    return;
-  }
-
-  await exportJsonProject(filenameBase);
+  statusLine.textContent = "Unsupported export selection.";
 }
 
 async function exportJsonProject(filenameBase = safeFilename(projectName)) {
@@ -1736,10 +1771,10 @@ function buildBddExportSvg() {
 
   const svg = createSvgNode("svg");
   svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  renderBddGraph(lastBddGraph, svg, { width: 760, minHeight: 360 });
+  renderBddGraph(lastBddGraph, svg, { width: 3600, minHeight: 360 });
 
   const height = Number(svg.getAttribute("viewBox")?.split(" ")[3] || "360");
-  svg.setAttribute("width", "760");
+  svg.setAttribute("width", "3600");
   svg.setAttribute("height", String(height));
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", `${projectName} binary decision diagram`);
@@ -1758,7 +1793,7 @@ function buildBddExportSvg() {
 
   return {
     svg,
-    width: 760,
+    width: 3600,
     height,
   };
 }
@@ -1826,7 +1861,7 @@ function createAnalysisSnapshotForExport() {
   };
 }
 
-function buildPdfReportHtml() {
+function buildFaultTreePdfReportHtml() {
   const analysis = createAnalysisSnapshotForExport();
   const faultTree = buildFaultTreeExportSvg();
   const faultTreeDataUrl = URL.createObjectURL(new Blob([serializeSvg(faultTree.svg)], { type: "image/svg+xml;charset=utf-8" }));
@@ -1910,9 +1945,78 @@ function buildPdfReportHtml() {
   };
 }
 
-async function exportPdfReport(filenameBase = safeFilename(projectName)) {
+function buildBddPdfReportHtml() {
+  if (!lastBddGraph) {
+    throw new Error("Run BDD analysis before exporting a BDD PDF.");
+  }
+
+  const bdd = lastBddAnalysis || {};
+  const diagram = buildBddExportSvg();
+  const diagramDataUrl = URL.createObjectURL(new Blob([serializeSvg(diagram.svg)], { type: "image/svg+xml;charset=utf-8" }));
+  const exportedAt = new Date().toLocaleString();
+  const variableOrder = (bdd.variableOrder || []).join(" < ") || "none";
+  const exactProbability = Number.isFinite(Number(bdd.exactProbability)) ? formatNumber(Number(bdd.exactProbability)) : "pending";
+  const nonTerminalCount = bdd.nodeCount ?? "pending";
+  const variableCount = Array.isArray(bdd.variableOrder) ? bdd.variableOrder.length : "pending";
+
+  return {
+    html: `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <title>${escapeHtml(projectName)} BDD</title>
+          <style>
+            @page { size: A4 landscape; margin: 14mm; }
+            body { font-family: "Segoe UI", Arial, sans-serif; color: #1f2937; margin: 0; }
+            h1, h2 { margin: 0 0 10px; }
+            p { margin: 0; }
+            .header { margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb; }
+            .header p { color: #475467; margin-top: 4px; }
+            .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0 18px; }
+            .meta-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; background: #fffdf8; }
+            .meta-card strong { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a5a14; margin-bottom: 4px; }
+            .diagram { border: 1px solid #e5e7eb; border-radius: 14px; padding: 10px; background: white; page-break-inside: avoid; text-align: center; }
+            .diagram img { width: 100%; max-width: 100%; max-height: 60vh; height: auto; display: inline-block; object-fit: contain; }
+            .section { margin-top: 20px; page-break-inside: avoid; }
+            .note { color: #667085; font-size: 11px; margin-top: 8px; }
+            .order { font-size: 11px; line-height: 1.5; word-break: break-word; }
+          </style>
+        </head>
+        <body>
+          <section class="header">
+            <h1>${escapeHtml(projectName)} BDD</h1>
+            <p>BDD export generated on ${escapeHtml(exportedAt)}</p>
+          </section>
+          <section class="meta">
+            <div class="meta-card"><strong>Ordering</strong><span>${escapeHtml(bdd.ordering || bddOrderingSelect.value)}</span></div>
+            <div class="meta-card"><strong>Variables</strong><span>${escapeHtml(String(variableCount))}</span></div>
+            <div class="meta-card"><strong>Non-terminal nodes</strong><span>${escapeHtml(String(nonTerminalCount))}</span></div>
+            <div class="meta-card"><strong>Exact probability</strong><span>${escapeHtml(String(exactProbability))}</span></div>
+          </section>
+          <section class="section">
+            <h2>BDD Diagram</h2>
+            <div class="diagram">
+              <img src="${diagramDataUrl}" alt="Binary decision diagram">
+            </div>
+            <p class="note">The diagram is scaled to fit the page while preserving aspect ratio.</p>
+          </section>
+          <section class="section">
+            <h2>Variable Order</h2>
+            <div class="order">${escapeHtml(variableOrder)}</div>
+          </section>
+        </body>
+      </html>
+    `,
+    revoke() {
+      URL.revokeObjectURL(diagramDataUrl);
+    },
+  };
+}
+
+async function exportDiagramPdf(target, filenameBase = safeFilename(projectName)) {
   try {
-    const report = buildPdfReportHtml();
+    const report = target === "bdd" ? buildBddPdfReportHtml() : buildFaultTreePdfReportHtml();
     const reportWindow = window.open("", "_blank");
     if (!reportWindow) {
       report.revoke();
@@ -1932,6 +2036,22 @@ async function exportPdfReport(filenameBase = safeFilename(projectName)) {
   } catch (error) {
     statusLine.textContent = error.message;
   }
+}
+
+async function exportDiagramSvg(target, filenameBase = safeFilename(projectName)) {
+  if (target === "bdd") {
+    await exportBddSvg(filenameBase);
+    return;
+  }
+  await exportFaultTreeSvg(filenameBase);
+}
+
+async function exportDiagramPng(target, filenameBase = safeFilename(projectName)) {
+  if (target === "bdd") {
+    await exportBddPng(filenameBase);
+    return;
+  }
+  await exportFaultTreePng(filenameBase);
 }
 
 async function exportFaultTreeSvg(filenameBase = safeFilename(projectName)) {
@@ -2348,6 +2468,8 @@ function minimizeCutSets(cutSets) {
 
 function clearAnalysisResults(message) {
   lastAnalysisSnapshot = null;
+  lastBddGraph = null;
+  lastBddAnalysis = null;
   qualitativeTableBody.innerHTML = `
     <tr>
       <td colspan="3">${escapeHtml(message)}</td>
@@ -2361,6 +2483,86 @@ function clearAnalysisResults(message) {
   metricBddVariableOrder.textContent = "pending";
   renderBddGraph(null);
   clearAnalysisSummary();
+}
+
+async function generateBddForCurrentModel() {
+  const validationErrors = validateModelForAnalysis();
+  if (validationErrors.length > 0) {
+    renderBddResults(null);
+    statusLine.textContent = `BDD blocked: ${validationErrors[0]}`;
+    return false;
+  }
+
+  const root = model.nodes[model.rootId];
+  if (!root || root.children.length === 0) {
+    renderBddResults(null);
+    statusLine.textContent = "BDD needs at least one child under the top event.";
+    return false;
+  }
+
+  statusLine.textContent = "Generating BDD...";
+  try {
+    const bddAnalysis = await getDrawableBddAnalysis();
+    renderBddResults(bddAnalysis.bdd);
+    if (!lastBddGraph) {
+      throw new Error("BDD analysis completed, but the backend did not return graph data. Restart the Python backend, then run analysis again.");
+    }
+    statusLine.textContent = bddAnalysis.usedFallback
+      ? `BDD generated with infix ordering: ${metricBddNodes.textContent} nodes.`
+      : `BDD generated: ${metricBddNodes.textContent} nodes.`;
+    return true;
+  } catch (error) {
+    renderBddResults(null);
+    statusLine.textContent = `BDD generation failed: ${error.message}`;
+    return false;
+  }
+}
+
+async function getDrawableBddAnalysis() {
+  const preferredOrdering = bddOrderingSelect.value;
+  const preferredBdd = await fetchBddAnalysis(preferredOrdering);
+  if (preferredBdd?.graph || preferredOrdering === "infix") {
+    return {
+      bdd: preferredBdd,
+      usedFallback: false,
+    };
+  }
+
+  const infixBdd = await fetchBddAnalysis("infix");
+  if (infixBdd?.graph) {
+    bddOrderingSelect.value = "infix";
+    updateCustomBddOrderVisibility();
+    return {
+      bdd: infixBdd,
+      usedFallback: true,
+    };
+  }
+
+  return {
+    bdd: preferredBdd,
+    usedFallback: false,
+  };
+}
+
+async function fetchBddAnalysis(ordering = bddOrderingSelect.value) {
+  const project = modelToProjectJson();
+  project.analysis.variableOrdering = ordering;
+  if (ordering !== "custom") {
+    project.analysis.customVariableOrder = [];
+  }
+
+  const response = await fetch(bddApiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(project),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.detail || result.error || "BDD analysis failed.");
+  }
+  return result?.bdd || null;
 }
 
 async function runAnalysis() {
@@ -2381,7 +2583,7 @@ async function runAnalysis() {
   statusLine.textContent = "Sending model to Python backend...";
   const project = modelToProjectJson();
   let backendResult;
-  let bddResult;
+  let bddAnalysis;
   const analysisStart = performance.now();
   try {
     const response = await fetch(analysisApiUrl, {
@@ -2395,17 +2597,7 @@ async function runAnalysis() {
     if (!response.ok) {
       throw new Error(backendResult.detail || backendResult.error || "Backend analysis failed.");
     }
-    const bddResponse = await fetch(bddApiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(project),
-    });
-    bddResult = await bddResponse.json();
-    if (!bddResponse.ok) {
-      throw new Error(bddResult.detail || bddResult.error || "BDD analysis failed.");
-    }
+    bddAnalysis = await getDrawableBddAnalysis();
   } catch (error) {
     clearAnalysisResults(`Python backend is not available: ${error.message}`);
     statusLine.textContent = "Analysis blocked: Python backend is not available.";
@@ -2448,9 +2640,16 @@ async function runAnalysis() {
   metricMissionTime.textContent = "Rare-event approximation";
   metricTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
   metricVariableCount.textContent = String(getLeafEventNodes().length);
-  renderBddResults(bddResult?.bdd);
-  renderAnalysisSummary(cutSets, topProbability, analysisDuration, bddResult?.bdd);
-  statusLine.textContent = `Backend analysis refreshed: ${backendResult.count ?? cutSets.length} minimal cut sets.`;
+  renderBddResults(bddAnalysis?.bdd);
+  renderAnalysisSummary(cutSets, topProbability, analysisDuration, bddAnalysis?.bdd);
+  if (bddAnalysis?.bdd && !bddAnalysis.bdd.graph) {
+    statusLine.textContent = `Backend analysis refreshed: ${backendResult.count ?? cutSets.length} minimal cut sets. BDD graph data was not returned; restart the Python backend and run analysis again.`;
+    return;
+  }
+
+  statusLine.textContent = bddAnalysis?.usedFallback
+    ? `Backend analysis refreshed: ${backendResult.count ?? cutSets.length} minimal cut sets. BDD switched to infix ordering for display.`
+    : `Backend analysis refreshed: ${backendResult.count ?? cutSets.length} minimal cut sets.`;
 }
 
 function clearAnalysisSummary() {
@@ -2472,7 +2671,8 @@ function renderBddResults(bdd) {
     metricBddNodes.textContent = "pending";
     metricBddVariableOrder.textContent = "pending";
     lastBddGraph = null;
-    renderBddGraph(null, workspaceBddGraph, { width: 760, minHeight: 360 });
+    lastBddAnalysis = null;
+    renderBddGraph(null, workspaceBddGraph, { width: 3000, minHeight: 360 });
     return;
   }
 
@@ -2484,7 +2684,8 @@ function renderBddResults(bdd) {
   metricBddNodes.textContent = String(visibleNonTerminalNodeCount);
   metricBddVariableOrder.textContent = (bdd.variableOrder || []).join(" < ") || "none";
   lastBddGraph = bdd.graph || null;
-  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 760, minHeight: 360 });
+  lastBddAnalysis = bdd;
+  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 3000, minHeight: 360 });
 }
 
 function compareBddNodes(left, right) {
@@ -2502,6 +2703,118 @@ function getBddBranchBias(branch, reverse = false) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function buildBddNodeIndex(graph) {
+  const nodes = new Map();
+  const childrenBySource = new Map();
+
+  graph.nodes.forEach((node) => {
+    nodes.set(node.id, node);
+    childrenBySource.set(node.id, { 0: null, 1: null });
+  });
+
+  graph.edges.forEach((edge) => {
+    if (!childrenBySource.has(edge.source)) {
+      childrenBySource.set(edge.source, { 0: null, 1: null });
+    }
+    childrenBySource.get(edge.source)[edge.branch] = edge.target;
+  });
+
+  return { nodes, childrenBySource };
+}
+
+function computeBddNodePositions(graph, width, levelGap, marginX) {
+  const { nodes, childrenBySource } = buildBddNodeIndex(graph);
+  const positions = new Map();
+  const leftX = marginX;
+  const rightX = width - marginX;
+  const minSeparation = Math.max(420, Math.round(width / 7));
+
+  function place(nodeId) {
+    if (positions.has(nodeId)) {
+      return positions.get(nodeId);
+    }
+
+    const node = nodes.get(nodeId);
+    if (!node) {
+      return null;
+    }
+
+    if (node.kind === "terminal") {
+      const x = node.label === "0" ? leftX : rightX;
+      const y = 46 + node.level * levelGap;
+      const position = { x, y };
+      positions.set(nodeId, position);
+      return position;
+    }
+
+    const children = childrenBySource.get(nodeId) || { 0: null, 1: null };
+    const lowChild = children[0] ? place(children[0]) : null;
+    const highChild = children[1] ? place(children[1]) : null;
+    const fallbackLow = leftX + (width * 0.15);
+    const fallbackHigh = rightX - (width * 0.15);
+    const lowX = lowChild?.x ?? fallbackLow;
+    const highX = highChild?.x ?? fallbackHigh;
+    const midpoint = (lowX + highX) / 2;
+    const branchSpread = Math.max(minSeparation, Math.abs(highX - lowX) * 0.75);
+    const directionBias = (node.level % 2 === 0 ? -1 : 1) * Math.min(360, branchSpread * 0.7);
+    const x = clamp(midpoint + directionBias, leftX, rightX);
+    const y = 46 + node.level * levelGap;
+    const position = { x: Math.round(x), y };
+    positions.set(nodeId, position);
+    return position;
+  }
+
+  const root = graph.nodes.find((node) => node.level === 0);
+  if (root) {
+    place(root.id);
+  }
+
+  graph.nodes
+    .slice()
+    .sort((left, right) => left.level - right.level)
+    .forEach((node) => {
+      if (!positions.has(node.id)) {
+        place(node.id);
+      }
+    });
+
+  const levelBuckets = new Map();
+  positions.forEach((position, nodeId) => {
+    const node = nodes.get(nodeId);
+    if (!node) {
+      return;
+    }
+    if (!levelBuckets.has(node.level)) {
+      levelBuckets.set(node.level, []);
+    }
+    levelBuckets.get(node.level).push({ id: nodeId, x: position.x, y: position.y });
+  });
+
+  [...levelBuckets.values()].forEach((levelNodes) => {
+    if (levelNodes.length <= 1) {
+      return;
+    }
+
+    levelNodes.sort((left, right) => left.x - right.x);
+    const currentSpan = levelNodes[levelNodes.length - 1].x - levelNodes[0].x;
+    const desiredSpan = Math.max((levelNodes.length - 1) * minSeparation, Math.round((rightX - leftX) * 0.82));
+    const targetSpan = Math.max(currentSpan, desiredSpan);
+    const center = levelNodes.reduce((sum, node) => sum + node.x, 0) / levelNodes.length;
+    const start = clamp(Math.round(center - targetSpan / 2), leftX, Math.max(leftX, rightX - targetSpan));
+    const step = levelNodes.length > 1 ? targetSpan / (levelNodes.length - 1) : 0;
+
+    levelNodes.forEach((node, index) => {
+      node.x = start + index * step;
+    });
+
+    levelNodes.forEach((node) => {
+      positions.set(node.id, { x: Math.round(node.x), y: node.y });
+    });
+  });
+
+  return positions;
 }
 
 function buildBddOrderingState(graph) {
@@ -2571,78 +2884,30 @@ function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
     return;
   }
 
-  const ordering = buildBddOrderingState(graph);
   const levelGap = 84;
-  const nodeGap = 224;
-  const marginX = 84;
-  const baseWidth = options.width || 760;
+  const marginX = 320;
+  const baseWidth = options.width || 3000;
   const minHeight = options.minHeight || 320;
-  const maxNodesPerLevel = Math.max(...[...ordering.levels.values()].map((nodes) => nodes.length), 1);
-  const width = Math.max(baseWidth, marginX * 2 + Math.max(0, maxNodesPerLevel - 1) * nodeGap + 160);
-  const height = Math.max(minHeight, (ordering.maxLevel + 1) * levelGap + 60);
+  const maxLevel = Math.max(...graph.nodes.map((node) => node.level));
+  const nodesByLevel = new Map();
+  graph.nodes.forEach((node) => {
+    if (!nodesByLevel.has(node.level)) {
+      nodesByLevel.set(node.level, []);
+    }
+    nodesByLevel.get(node.level).push(node);
+  });
+  const maxLevelWidth = Math.max(
+    ...[...nodesByLevel.values()].map((levelNodes) => Math.max(1, levelNodes.length) * 640)
+  );
+  const width = Math.max(baseWidth, marginX * 2 + maxLevelWidth, marginX * 2 + graph.nodes.length * 120);
+  const height = Math.max(minHeight, (maxLevel + 1) * levelGap + 60);
   target.setAttribute("viewBox", `0 0 ${width} ${height}`);
   target.setAttribute("width", String(width));
   target.setAttribute("height", String(height));
   target.style.width = `${width}px`;
   target.style.height = `${height}px`;
 
-  const positions = new Map();
-  ordering.levels.forEach((nodes, level) => {
-    const levelWidth = Math.max(width - marginX * 2, Math.max(0, nodes.length - 1) * nodeGap);
-    const gap = nodes.length > 1 ? levelWidth / (nodes.length - 1) : 0;
-    const startX = nodes.length > 1 ? marginX : Math.round(width / 2);
-    nodes.forEach((node, index) => {
-      const plannedX = nodes.length === 1
-        ? scoreBddNode(node, ordering.incoming, positions, false)
-        : startX + gap * index;
-      positions.set(node.id, {
-        x: Math.round(clamp(plannedX, marginX, width - marginX)),
-        y: 46 + level * levelGap,
-      });
-    });
-  });
-
-  for (let iteration = 0; iteration < 4; iteration += 1) {
-    for (let level = 1; level <= ordering.maxLevel; level += 1) {
-      const nodes = ordering.levels.get(level);
-      if (!nodes) {
-        continue;
-      }
-      const ordered = orderBddLevel(nodes, ordering.incoming, positions, false);
-      const levelWidth = Math.max(width - marginX * 2, Math.max(0, ordered.length - 1) * nodeGap);
-      const gap = ordered.length > 1 ? levelWidth / (ordered.length - 1) : 0;
-      const startX = ordered.length > 1 ? marginX : Math.round(width / 2);
-      ordered.forEach((node, index) => {
-        const plannedX = ordered.length === 1
-          ? scoreBddNode(node, ordering.incoming, positions, false)
-          : startX + gap * index;
-        positions.set(node.id, {
-          x: Math.round(clamp(plannedX, marginX, width - marginX)),
-          y: 46 + level * levelGap,
-        });
-      });
-    }
-
-    for (let level = ordering.maxLevel - 1; level >= 0; level -= 1) {
-      const nodes = ordering.levels.get(level);
-      if (!nodes) {
-        continue;
-      }
-      const ordered = orderBddLevel(nodes, ordering.outgoing, positions, true);
-      const levelWidth = Math.max(width - marginX * 2, Math.max(0, ordered.length - 1) * nodeGap);
-      const gap = ordered.length > 1 ? levelWidth / (ordered.length - 1) : 0;
-      const startX = ordered.length > 1 ? marginX : Math.round(width / 2);
-      ordered.forEach((node, index) => {
-        const plannedX = ordered.length === 1
-          ? scoreBddNode(node, ordering.outgoing, positions, true)
-          : startX + gap * index;
-        positions.set(node.id, {
-          x: Math.round(clamp(plannedX, marginX, width - marginX)),
-          y: 46 + level * levelGap,
-        });
-      });
-    }
-  }
+  const positions = computeBddNodePositions(graph, width, levelGap, marginX);
 
   [...graph.edges]
     .sort((left, right) => {
@@ -2675,6 +2940,9 @@ function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
 
   graph.nodes.forEach((node) => {
     const position = positions.get(node.id);
+    if (!position) {
+      return;
+    }
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", `bdd-node ${node.kind === "terminal" ? "is-terminal" : ""}`);
 
@@ -2946,7 +3214,8 @@ shortcutsModal.addEventListener("click", (event) => {
 closeExportButton.addEventListener("click", closeExportModal);
 cancelExportButton.addEventListener("click", closeExportModal);
 confirmExportButton.addEventListener("click", confirmProjectExport);
-exportTypeSelect.addEventListener("change", updateExportExtensionPreview);
+exportTargetSelect.addEventListener("change", updateExportFormatOptions);
+exportFormatSelect.addEventListener("change", updateExportExtensionPreview);
 exportModal.addEventListener("click", (event) => {
   if (event.target === exportModal) {
     closeExportModal();

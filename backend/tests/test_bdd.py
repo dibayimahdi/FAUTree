@@ -88,6 +88,59 @@ class BDDAnalysisTests(unittest.TestCase):
 
         self.assertEqual(result.variable_order, ("A", "B", "C"))
 
+    def test_large_text_expression_with_repeated_events_returns_graph(self) -> None:
+        nodes: list[FaultTreeNode] = [FaultTreeNode("top", "top_event", "Top")]
+        edges: list[FaultTreeEdge] = []
+        sequence = {"gate": 0, "event": 0}
+
+        def event(label: str) -> str:
+            sequence["event"] += 1
+            node_id = f"e{sequence['event']}"
+            nodes.append(FaultTreeNode(node_id, "basic_event", label, probability=0.001))
+            return node_id
+
+        def gate(gate_type: str, child_ids: list[str]) -> str:
+            sequence["gate"] += 1
+            node_id = "root_gate" if sequence["gate"] == 1 else f"g{sequence['gate']}"
+            nodes.append(FaultTreeNode(node_id, "gate", f"{gate_type} gate", gate_type=gate_type))
+            edges.extend(FaultTreeEdge(node_id, child_id) for child_id in child_ids)
+            return node_id
+
+        inner = gate(
+            "AND",
+            [
+                gate("OR", [event("g062"), event("g066"), event("g117"), event("g129"), event("c048")]),
+                gate("OR", [event("g063"), event("g068"), event("g118"), event("g130"), event("c049")]),
+                gate("OR", [event("g064"), event("g067"), event("g117"), event("g131"), event("c050")]),
+                gate("OR", [event("g065"), event("g069"), event("g118"), event("g132"), event("c051")]),
+            ],
+        )
+        root = gate(
+            "AND",
+            [
+                event("g126"),
+                event("g138"),
+                gate("OR", [event("g111"), event("g112"), inner, event("c053")]),
+            ],
+        )
+        edges.append(FaultTreeEdge("top", root))
+
+        result = compute_bdd_analysis(
+            FaultTreeProject(
+                schema_version="0.1.0",
+                project=ProjectMetadata(id="reported-expression", name="Reported expression"),
+                analysis=AnalysisSettings(variable_ordering="infix"),
+                nodes=nodes,
+                edges=edges,
+            ),
+            "infix",
+        )
+
+        self.assertEqual(result.node_count, 35)
+        self.assertIsNotNone(result.graph)
+        self.assertEqual(len(result.graph["nodes"]), 37)
+        self.assertEqual(len(result.graph["edges"]), 70)
+
     def test_undeveloped_event_is_bdd_variable(self) -> None:
         project = FaultTreeProject(
             schema_version="0.1.0",

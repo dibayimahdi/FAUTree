@@ -187,7 +187,7 @@
             <span>BDD ordering</span>
             <select id="bdd-ordering-select">
               <option>alphabetical</option>
-              <option>infix</option>
+              <option selected>infix</option>
               <option>custom</option>
             </select>
           </label>
@@ -346,7 +346,7 @@
         <div class="modal-header">
           <div>
             <h2 id="export-title">Export Project</h2>
-            <p>Save the current fault tree model.</p>
+            <p>Export the current fault tree or BDD as PDF, SVG, or PNG.</p>
           </div>
           <button class="icon-button" id="close-export" title="Close export" aria-label="Close export">x</button>
         </div>
@@ -355,19 +355,22 @@
             <span>Filename</span>
             <div class="filename-control">
               <input id="export-filename-input" type="text">
-              <strong id="export-extension-preview">.json</strong>
+              <strong id="export-extension-preview">.pdf</strong>
             </div>
           </label>
           <label class="field export-field">
-            <span>Save as type</span>
-            <select id="export-type-select">
-              <option value="pdf">PDF report (.pdf)</option>
-              <option value="json">FAUTree JSON (.json)</option>
-              <option value="sbe">XFTA SBE (.sbe)</option>
-              <option value="fault-tree-svg">Fault Tree SVG (.svg)</option>
-              <option value="fault-tree-png">Fault Tree PNG (.png)</option>
-              <option value="bdd-svg">BDD SVG (.svg)</option>
-              <option value="bdd-png">BDD PNG (.png)</option>
+            <span>Diagram</span>
+            <select id="export-target-select">
+              <option value="fault-tree">Fault tree</option>
+              <option value="bdd">BDD</option>
+            </select>
+          </label>
+          <label class="field export-field">
+            <span>Format</span>
+            <select id="export-format-select">
+              <option value="pdf">PDF (.pdf)</option>
+              <option value="svg">SVG (.svg)</option>
+              <option value="png">PNG (.png)</option>
             </select>
           </label>
         </div>
@@ -378,6 +381,6 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260530-boolean-expression-builder"></script>
+    <script src="./app.js?v=20260603-diagram-export-flow"></script>
   </body>
 </html>
