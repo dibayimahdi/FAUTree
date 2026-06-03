@@ -6,6 +6,7 @@ from typing import Literal
 
 NodeType = Literal["top_event", "intermediate_event", "basic_event", "undeveloped_event", "gate"]
 GateType = Literal["AND", "OR", "K_OF_N"]
+GATE_TYPES = {"AND", "OR", "K_OF_N"}
 
 
 @dataclass(frozen=True)
@@ -14,17 +15,20 @@ class FaultTreeNode:
     type: NodeType
     label: str
     gate_type: GateType | None = None
+    voting_threshold: int | None = None
     failure_rate: float | None = None
     probability: float | None = None
 
     def to_dict(self) -> dict:
-        payload: dict[str, str | float | None] = {
+        payload: dict[str, str | int | float | None] = {
             "id": self.id,
             "type": self.type,
             "label": self.label,
         }
         if self.gate_type is not None:
             payload["gateType"] = self.gate_type
+        if self.voting_threshold is not None:
+            payload["votingThreshold"] = self.voting_threshold
         if self.probability is not None:
             payload["probability"] = self.probability
         elif self.failure_rate is not None:
@@ -111,14 +115,7 @@ class FaultTreeProject:
                 custom_variable_order=tuple(analysis_payload.get("customVariableOrder", [])),
             ),
             nodes=[
-                FaultTreeNode(
-                    id=node["id"],
-                    type=node["type"],
-                    label=node["label"],
-                    gate_type=node.get("gateType"),
-                    failure_rate=node.get("failureRate"),
-                    probability=node.get("probability", node.get("failureRate")),
-                )
+                cls._node_from_dict(node)
                 for node in payload.get("nodes", [])
             ],
             edges=[
@@ -147,8 +144,17 @@ class FaultTreeProject:
         for node in self.nodes:
             if node.type == "gate" and node.gate_type is None:
                 errors.append(f"Gate node is missing gate_type: {node.id}")
+            if node.type == "gate" and node.gate_type is not None and node.gate_type not in GATE_TYPES:
+                errors.append(f"Unsupported gate_type for gate node {node.id}: {node.gate_type}")
+            if node.type == "gate" and node.gate_type == "K_OF_N":
+                if node.voting_threshold is None:
+                    errors.append(f"Voting gate is missing voting_threshold: {node.id}")
+                elif node.voting_threshold < 1:
+                    errors.append(f"Voting gate threshold must be at least 1: {node.id}")
             if node.type != "gate" and node.gate_type is not None:
                 errors.append(f"Only gate nodes can define gate_type: {node.id}")
+            if (node.type != "gate" or node.gate_type != "K_OF_N") and node.voting_threshold is not None:
+                errors.append(f"Only voting gate nodes can define voting_threshold: {node.id}")
 
         rates_by_basic_event_label: dict[str, set[float]] = {}
         for node in self.nodes:
@@ -164,3 +170,19 @@ class FaultTreeProject:
                 )
 
         return errors
+
+    @staticmethod
+    def _node_from_dict(node: dict) -> FaultTreeNode:
+        gate_type = node.get("gateType")
+        if gate_type == "VOTING":
+            gate_type = "K_OF_N"
+        voting_threshold = node.get("votingThreshold", node.get("threshold"))
+        return FaultTreeNode(
+            id=node["id"],
+            type=node["type"],
+            label=node["label"],
+            gate_type=gate_type,
+            voting_threshold=int(voting_threshold) if voting_threshold is not None else None,
+            failure_rate=node.get("failureRate"),
+            probability=node.get("probability", node.get("failureRate")),
+        )

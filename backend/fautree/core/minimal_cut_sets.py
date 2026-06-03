@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import combinations as choose
 
 from .model import FaultTreeNode, FaultTreeProject
 
@@ -74,7 +75,7 @@ class _MocusAnalyzer:
                 raise ValueError(f"{node.label} must connect to exactly one logic gate.")
             child = self._node(child_ids[0])
             if child.type != "gate":
-                raise ValueError(f"{node.label} must connect to an AND or OR gate.")
+                raise ValueError(f"{node.label} must connect to an AND, OR, or Voting gate.")
             return self._expand(child.id, [*path, node_id])
 
         if node.type != "gate":
@@ -98,7 +99,32 @@ class _MocusAnalyzer:
                 ]
             return self._minimize(combinations)
 
+        if node.gate_type == "K_OF_N":
+            threshold = self._voting_threshold(node, len(child_ids))
+            candidate_sets: list[frozenset[str]] = []
+            for child_indexes in choose(range(len(child_sets)), threshold):
+                combinations_for_vote = [frozenset()]
+                for child_index in child_indexes:
+                    combinations_for_vote = [
+                        left.union(right)
+                        for left in combinations_for_vote
+                        for right in child_sets[child_index]
+                    ]
+                candidate_sets.extend(combinations_for_vote)
+            return self._minimize(candidate_sets)
+
         raise ValueError(f"Unsupported gate type for minimal cut sets: {node.gate_type}")
+
+    @staticmethod
+    def _voting_threshold(node: FaultTreeNode, child_count: int) -> int:
+        threshold = node.voting_threshold
+        if threshold is None:
+            raise ValueError(f"{node.label} voting gate needs a threshold.")
+        if threshold < 1:
+            raise ValueError(f"{node.label} voting gate threshold must be at least 1.")
+        if threshold > child_count:
+            raise ValueError(f"{node.label} voting gate threshold cannot exceed its number of inputs.")
+        return threshold
 
     def _node(self, node_id: str) -> FaultTreeNode:
         node = self.nodes.get(node_id)

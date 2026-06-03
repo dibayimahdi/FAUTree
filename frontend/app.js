@@ -37,6 +37,8 @@ const builderTitle = document.querySelector("#builder-title");
 const labelInput = document.querySelector("#node-label-input");
 const nodeKindSelect = document.querySelector("#node-kind-select");
 const rateInput = document.querySelector("#node-rate-input");
+const votingThresholdField = document.querySelector("#voting-threshold-field");
+const votingThresholdInput = document.querySelector("#voting-threshold-input");
 const childKindSelect = document.querySelector("#child-kind-select");
 const textArea = document.querySelector("#fault-tree-text");
 const bddOrderingSelect = document.querySelector("#bdd-ordering-select");
@@ -305,13 +307,79 @@ function createEmptyModel() {
   };
 }
 
-function createGateSymbol(gate) {
+function isGateNodeType(type) {
+  return type === "and_gate" || type === "or_gate" || type === "voting_gate";
+}
+
+function gateTypeFromNodeKind(type) {
+  if (type === "and_gate") {
+    return "AND";
+  }
+  if (type === "or_gate") {
+    return "OR";
+  }
+  if (type === "voting_gate") {
+    return "K_OF_N";
+  }
+  return "";
+}
+
+function gateNodeKindValue(gate) {
+  if (gate === "AND") {
+    return "and_gate";
+  }
+  if (gate === "OR") {
+    return "or_gate";
+  }
+  return "voting_gate";
+}
+
+function gateDisplayName(node) {
+  if (!node || node.kind !== "gate") {
+    return "None";
+  }
+  if (node.gate === "K_OF_N") {
+    const threshold = Number(node.votingThreshold || 2);
+    const childCount = node.children?.length || "N";
+    return `Voting ${threshold}oo${childCount}`;
+  }
+  return node.gate || "None";
+}
+
+function parseVotingThreshold(value) {
+  const parsed = Number.parseInt(String(value).trim(), 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
+
+function syncVotingThresholdControl() {
+  if (!votingThresholdField || !votingThresholdInput) {
+    return;
+  }
+  const selected = model.nodes[selectedNodeId];
+  const isVotingSelection = selected?.kind === "gate" && selected.gate === "K_OF_N";
+  const isVotingEdit = nodeKindSelect.value === "voting_gate" || childKindSelect.value === "voting_gate";
+  votingThresholdField.hidden = !(isVotingSelection || isVotingEdit);
+  votingThresholdInput.disabled = votingThresholdField.hidden;
+}
+
+function createGateSymbol(gate, threshold = 2, childCount = "N") {
   if (gate === "AND") {
     return `
       <svg class="gate-symbol" viewBox="0 0 100 100" aria-hidden="true">
         <path d="M18 88 L18 45 C18 20 32 8 50 8 C68 8 82 20 82 45 L82 88 Z"></path>
       </svg>
       <span class="sr-only">AND gate</span>
+    `;
+  }
+
+  if (gate === "K_OF_N") {
+    const label = `${parseVotingThreshold(threshold)}oo${Number(childCount) > 0 ? childCount : "N"}`;
+    return `
+      <svg class="gate-symbol" viewBox="0 0 100 100" aria-hidden="true">
+        <path d="M14 88 C24 58 26 24 50 8 C74 24 76 58 86 88 C64 78 36 78 14 88 Z"></path>
+        <text x="50" y="61" text-anchor="middle">${escapeHtml(label)}</text>
+      </svg>
+      <span class="sr-only">Voting gate</span>
     `;
   }
 
@@ -329,7 +397,7 @@ function nodeKindLabel(node) {
   }
 
   if (node.kind === "gate") {
-    return `${node.gate} gate`;
+    return node.gate === "K_OF_N" ? "Voting gate" : `${node.gate} gate`;
   }
 
   if (node.kind === "intermediate_event") {
@@ -345,7 +413,7 @@ function nodeKindLabel(node) {
 
 function nodeKindValue(node) {
   if (node.kind === "gate") {
-    return node.gate === "AND" ? "and_gate" : "or_gate";
+    return gateNodeKindValue(node.gate);
   }
   if (node.kind === "intermediate_event") {
     return "intermediate_event";
@@ -376,11 +444,13 @@ function nodeTemplateFromType(type, id, label, rate) {
     };
   }
 
-  if (type === "and_gate" || type === "or_gate") {
+  if (isGateNodeType(type)) {
+    const gate = gateTypeFromNodeKind(type);
     return {
       id,
       kind: "gate",
-      gate: type === "and_gate" ? "AND" : "OR",
+      gate,
+      ...(gate === "K_OF_N" ? { votingThreshold: parseVotingThreshold(votingThresholdInput?.value || 2) } : {}),
       label,
       children: [],
     };
@@ -512,7 +582,7 @@ function renderCanvas() {
   visitTree(model.rootId, (node) => {
     const position = positions[node.id];
     const button = document.createElement("button");
-    button.className = `fault-node ${node.kind === "gate" ? "gate-node" : "event-node"} ${node.kind === "top_event" ? "top-event" : ""} ${node.kind === "basic_event" ? "basic-event" : ""} ${node.kind === "undeveloped_event" ? "undeveloped-event" : ""} ${node.kind === "intermediate_event" ? "intermediate-event" : ""} ${node.gate === "AND" ? "and-gate" : ""} ${node.gate === "OR" ? "or-gate" : ""}`;
+    button.className = `fault-node ${node.kind === "gate" ? "gate-node" : "event-node"} ${node.kind === "top_event" ? "top-event" : ""} ${node.kind === "basic_event" ? "basic-event" : ""} ${node.kind === "undeveloped_event" ? "undeveloped-event" : ""} ${node.kind === "intermediate_event" ? "intermediate-event" : ""} ${node.gate === "AND" ? "and-gate" : ""} ${node.gate === "OR" ? "or-gate" : ""} ${node.gate === "K_OF_N" ? "voting-gate" : ""}`;
     button.dataset.nodeId = node.id;
     button.style.left = `${position.x}px`;
     button.style.top = `${position.y}px`;
@@ -521,7 +591,7 @@ function renderCanvas() {
     button.classList.toggle("is-invalid", invalidNodeIds.has(node.id));
 
     if (node.kind === "gate") {
-      button.innerHTML = createGateSymbol(node.gate);
+      button.innerHTML = createGateSymbol(node.gate, node.votingThreshold, node.children.length);
     } else {
       const rate = node.failureRate ? `<small>p ${formatNumber(node.failureRate)}</small>` : "";
       button.innerHTML = `
@@ -564,11 +634,13 @@ function selectNode(nodeId) {
   nodeKindSelect.disabled = selected.kind === "top_event";
   rateInput.value = selected.failureRate ? String(selected.failureRate) : "0.001";
   rateInput.disabled = false;
+  votingThresholdInput.value = String(selected.votingThreshold || 2);
   nodeName.textContent = selected.label;
   nodeType.textContent = nodeKindLabel(selected);
-  nodeGate.textContent = selected.gate || "None";
+  nodeGate.textContent = gateDisplayName(selected);
   nodeRate.textContent = selected.failureRate ? formatNumber(selected.failureRate) : "Not assigned";
   statusLine.textContent = `Selected: ${selected.label}`;
+  syncVotingThresholdControl();
   renderCanvas();
   renderTreeList();
 }
@@ -579,6 +651,7 @@ function setTool(tool) {
     undeveloped: "undeveloped_event",
     and: "and_gate",
     or: "or_gate",
+    voting: "voting_gate",
   };
   const childKind = childKindByTool[tool];
   if (!childKind) {
@@ -587,6 +660,7 @@ function setTool(tool) {
 
   childKindSelect.value = childKind;
   syncToolButtons();
+  syncVotingThresholdControl();
   statusLine.textContent = `Tool: ${tool}`;
 }
 
@@ -596,6 +670,7 @@ function syncToolButtons() {
     undeveloped_event: "undeveloped",
     and_gate: "and",
     or_gate: "or",
+    voting_gate: "voting",
   };
   const activeTool = toolByChildKind[childKindSelect.value];
   document.querySelectorAll("[data-tool]").forEach((button) => {
@@ -642,7 +717,7 @@ function setDiagramView(view) {
   });
   document.querySelector("[data-diagram-panel='bdd']").classList.add("is-active");
   builderTitle.textContent = "Binary Decision Diagram";
-  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 3000, minHeight: 360 });
+  renderBddGraph(lastBddGraph, workspaceBddGraph, { fitToContainer: true, minHeight: 560 });
   statusLine.textContent = lastBddGraph ? "BDD view ready." : "Run analysis to create the BDD.";
 }
 
@@ -804,13 +879,20 @@ function applyNodeProperties() {
     selected.failureRate = rate;
     selected.children = [];
     delete selected.gate;
+    delete selected.votingThreshold;
   } else if (requestedType === "intermediate_event") {
     selected.kind = "intermediate_event";
     delete selected.failureRate;
     delete selected.gate;
+    delete selected.votingThreshold;
   } else {
     selected.kind = "gate";
-    selected.gate = requestedType === "and_gate" ? "AND" : "OR";
+    selected.gate = gateTypeFromNodeKind(requestedType);
+    if (selected.gate === "K_OF_N") {
+      selected.votingThreshold = parseVotingThreshold(votingThresholdInput.value);
+    } else {
+      delete selected.votingThreshold;
+    }
     delete selected.failureRate;
   }
 
@@ -828,8 +910,8 @@ function addChildNode() {
     return;
   }
 
-  if ((parent.kind === "top_event" || parent.kind === "intermediate_event") && (type === "basic_event" || type === "undeveloped_event")) {
-    statusLine.textContent = "Choose AND or OR to place a gate below this event.";
+  if ((parent.kind === "top_event" || parent.kind === "intermediate_event") && !isGateNodeType(type)) {
+    statusLine.textContent = "Choose a gate to place below this event.";
     return;
   }
 
@@ -840,7 +922,7 @@ function addChildNode() {
 
   if (parent.kind === "basic_event" || parent.kind === "undeveloped_event") {
     if (type === "basic_event" || type === "undeveloped_event" || type === "intermediate_event") {
-      statusLine.textContent = "Choose AND or OR to refine a basic event.";
+      statusLine.textContent = "Choose a gate to refine a basic event.";
       return;
     }
 
@@ -853,7 +935,7 @@ function addChildNode() {
     parent.children = [gateId];
     syncTextFromGraph();
     selectNode(gateId);
-    statusLine.textContent = `${parent.label} refined with ${model.nodes[gateId].gate} gate.`;
+    statusLine.textContent = `${parent.label} refined with ${nodeKindLabel(model.nodes[gateId])}.`;
     return;
   }
 
@@ -861,7 +943,7 @@ function addChildNode() {
   const label = requestedLabel && requestedLabel !== parent.label ? requestedLabel : defaultLabelForType(type);
 
   pushUndoSnapshot();
-  const id = nextNodeId(type === "and_gate" || type === "or_gate" ? "gate" : "basic_event");
+  const id = nextNodeId(isGateNodeType(type) ? "gate" : "basic_event");
   model.nodes[id] = nodeTemplateFromType(type, id, label, rate);
   parent.children.push(id);
   syncTextFromGraph();
@@ -882,6 +964,9 @@ function defaultLabelForType(type) {
   }
   if (type === "or_gate") {
     return nextAvailableLabel("OR gate");
+  }
+  if (type === "voting_gate") {
+    return nextAvailableLabel("Voting gate");
   }
   if (type === "undeveloped_event") {
     return nextAvailableLabel("Undeveloped event");
@@ -922,7 +1007,7 @@ function addSiblingNode() {
   const selectedIndex = parent.children.indexOf(selectedNodeId);
 
   pushUndoSnapshot();
-  const id = nextNodeId(type === "and_gate" || type === "or_gate" ? "gate" : "basic_event");
+  const id = nextNodeId(isGateNodeType(type) ? "gate" : "basic_event");
   model.nodes[id] = nodeTemplateFromType(type, id, label, rate);
   parent.children.splice(selectedIndex + 1, 0, id);
   syncTextFromGraph();
@@ -1088,6 +1173,12 @@ function handleKeyboardShortcut(event) {
   if (key === "o") {
     event.preventDefault();
     setTool("or");
+    return;
+  }
+
+  if (key === "v") {
+    event.preventDefault();
+    setTool("voting");
     return;
   }
 
@@ -1373,6 +1464,17 @@ function serializeBooleanNode(nodeIdOrNode, parentGate = null) {
     return "";
   }
 
+  if (node.gate === "K_OF_N") {
+    const threshold = parseVotingThreshold(node.votingThreshold || 2);
+    const terms = chooseItems(node.children, threshold)
+      .map((childIds) => {
+        const term = childIds.map((childId) => serializeBooleanNode(childId, "AND")).filter(Boolean).join(" /\\ ");
+        return wrapBooleanExpression(term, "OR", "AND");
+      })
+      .filter(Boolean);
+    return wrapBooleanExpression(terms.join(" \\/ "), parentGate, "OR");
+  }
+
   const operator = node.gate === "AND" ? "/\\" : "\\/";
   const expression = node.children.map((childId) => serializeBooleanNode(childId, node.gate)).filter(Boolean).join(` ${operator} `);
   return wrapBooleanExpression(expression, parentGate, node.gate);
@@ -1422,10 +1524,26 @@ function serializeTextModel() {
   return serializeBooleanNode(rootChild);
 }
 
+function chooseItems(items, size) {
+  if (size <= 0) {
+    return [[]];
+  }
+  if (size > items.length) {
+    return [];
+  }
+  const choices = [];
+  items.forEach((item, index) => {
+    chooseItems(items.slice(index + 1), size - 1).forEach((suffix) => {
+      choices.push([item, ...suffix]);
+    });
+  });
+  return choices;
+}
+
 function modelToSbe() {
   const root = model.nodes[model.rootId];
   if (!root || root.children.length !== 1 || model.nodes[root.children[0]]?.kind !== "gate") {
-    throw new Error("Export SBE needs one AND or OR gate below the top event.");
+    throw new Error("Export SBE needs one AND, OR, or Voting gate below the top event.");
   }
 
   const identifiers = createSbeIdentifiers();
@@ -1436,6 +1554,9 @@ function modelToSbe() {
     const node = model.nodes[nodeId];
     if (!node || node.kind !== "gate" || emittedGates.has(nodeId)) {
       return;
+    }
+    if (node.gate === "K_OF_N") {
+      throw new Error("SBE export currently supports only AND and OR gates. Use FAUTree JSON export for Voting gates.");
     }
 
     emittedGates.add(nodeId);
@@ -1727,7 +1848,7 @@ function buildFaultTreeExportSvg() {
       label.setAttribute("y", position.y + 82);
       label.setAttribute("class", "gate-label");
       label.setAttribute("text-anchor", "middle");
-      label.textContent = node.gate;
+      label.textContent = node.gate === "K_OF_N" ? `${parseVotingThreshold(node.votingThreshold || 2)}oo${node.children.length || "N"}` : node.gate;
       svg.append(label);
       return;
     }
@@ -2120,6 +2241,9 @@ function modelToProjectJson() {
       };
       if (node.kind === "gate") {
         payload.gateType = node.gate;
+        if (node.gate === "K_OF_N") {
+          payload.votingThreshold = parseVotingThreshold(node.votingThreshold || 2);
+        }
       }
       if (node.kind === "basic_event" || node.kind === "undeveloped_event") {
         payload.probability = node.failureRate ?? 0;
@@ -2383,10 +2507,15 @@ function normalizeImportedNode(node) {
   }
 
   if (node.type === "gate") {
+    const gateType = node.gateType === "VOTING" ? "K_OF_N" : node.gateType;
+    if (!["AND", "OR", "K_OF_N"].includes(gateType)) {
+      throw new Error(`Invalid FAUTree JSON: unsupported gate type "${node.gateType}".`);
+    }
     return {
       id: node.id,
       kind: "gate",
-      gate: node.gateType === "AND" ? "AND" : "OR",
+      gate: gateType,
+      ...(gateType === "K_OF_N" ? { votingThreshold: parseVotingThreshold(node.votingThreshold || node.threshold || 2) } : {}),
       label: node.label,
       children: [],
     };
@@ -2445,6 +2574,17 @@ function computeCutSets(nodeId) {
   const childSets = node.children.map((childId) => computeCutSets(childId));
   if (node.kind === "top_event" || node.kind === "intermediate_event" || node.gate === "OR") {
     return childSets.flat();
+  }
+
+  if (node.gate === "K_OF_N") {
+    const threshold = parseVotingThreshold(node.votingThreshold || 2);
+    return chooseItems(childSets, threshold).flatMap((selectedChildSets) => {
+      return selectedChildSets.reduce(
+        (combined, sets) =>
+          combined.flatMap((left) => sets.map((right) => uniqueItems([...left, ...right]))),
+        [[]]
+      );
+    });
   }
 
   return childSets.reduce(
@@ -2672,7 +2812,7 @@ function renderBddResults(bdd) {
     metricBddVariableOrder.textContent = "pending";
     lastBddGraph = null;
     lastBddAnalysis = null;
-    renderBddGraph(null, workspaceBddGraph, { width: 3000, minHeight: 360 });
+    renderBddGraph(null, workspaceBddGraph, { fitToContainer: true, minHeight: 560 });
     return;
   }
 
@@ -2685,7 +2825,7 @@ function renderBddResults(bdd) {
   metricBddVariableOrder.textContent = (bdd.variableOrder || []).join(" < ") || "none";
   lastBddGraph = bdd.graph || null;
   lastBddAnalysis = bdd;
-  renderBddGraph(lastBddGraph, workspaceBddGraph, { width: 3000, minHeight: 360 });
+  renderBddGraph(lastBddGraph, workspaceBddGraph, { fitToContainer: true, minHeight: 560 });
 }
 
 function compareBddNodes(left, right) {
@@ -2724,12 +2864,13 @@ function buildBddNodeIndex(graph) {
   return { nodes, childrenBySource };
 }
 
-function computeBddNodePositions(graph, width, levelGap, marginX) {
+function computeBddNodePositions(graph, width, levelGap, marginX, options = {}) {
   const { nodes, childrenBySource } = buildBddNodeIndex(graph);
   const positions = new Map();
   const leftX = marginX;
   const rightX = width - marginX;
-  const minSeparation = Math.max(420, Math.round(width / 7));
+  const minSeparation = options.minSeparation || Math.max(420, Math.round(width / 7));
+  const maxDirectionBias = options.maxDirectionBias || 360;
 
   function place(nodeId) {
     if (positions.has(nodeId)) {
@@ -2758,7 +2899,7 @@ function computeBddNodePositions(graph, width, levelGap, marginX) {
     const highX = highChild?.x ?? fallbackHigh;
     const midpoint = (lowX + highX) / 2;
     const branchSpread = Math.max(minSeparation, Math.abs(highX - lowX) * 0.75);
-    const directionBias = (node.level % 2 === 0 ? -1 : 1) * Math.min(360, branchSpread * 0.7);
+    const directionBias = (node.level % 2 === 0 ? -1 : 1) * Math.min(maxDirectionBias, branchSpread * 0.7);
     const x = clamp(midpoint + directionBias, leftX, rightX);
     const y = 46 + node.level * levelGap;
     const position = { x: Math.round(x), y };
@@ -2813,6 +2954,89 @@ function computeBddNodePositions(graph, width, levelGap, marginX) {
       positions.set(node.id, { x: Math.round(node.x), y: node.y });
     });
   });
+
+  return positions;
+}
+
+function shouldUseCompactBddLayout(graph) {
+  const decisionNodes = graph.nodes.filter((node) => node.kind !== "terminal");
+  const decisionLevels = new Map();
+  decisionNodes.forEach((node) => {
+    if (!decisionLevels.has(node.level)) {
+      decisionLevels.set(node.level, 0);
+    }
+    decisionLevels.set(node.level, decisionLevels.get(node.level) + 1);
+  });
+  const widestDecisionLevel = Math.max(1, ...decisionLevels.values());
+  return decisionNodes.length <= 8 && widestDecisionLevel <= 3;
+}
+
+function computeLayeredDagBddPositions(graph, width, levelGap, marginX) {
+  const state = buildBddOrderingState(graph);
+  const positions = new Map();
+  const leftX = marginX;
+  const rightX = width - marginX;
+  const levels = new Map();
+  const levelNumbers = [...state.levels.keys()].sort((left, right) => left - right);
+
+  levelNumbers.forEach((level) => {
+    levels.set(level, [...state.levels.get(level)].sort(compareBddNodes));
+  });
+
+  function assignPositions() {
+    levelNumbers.forEach((level) => {
+      const levelNodes = levels.get(level) || [];
+      const y = 46 + level * levelGap;
+      const drift = (level % 2 === 0 ? -1 : 1) * Math.min(72, Math.round(width * 0.042));
+
+      if (levelNodes.every((node) => node.kind === "terminal")) {
+        levelNodes.forEach((node) => {
+          const terminalLabel = String(node.label);
+          const baseX = terminalLabel === "0" ? width * 0.28 : terminalLabel === "1" ? width * 0.72 : width / 2;
+          const x = clamp(baseX + drift * 0.2, leftX, rightX);
+          positions.set(node.id, { x: Math.round(x), y });
+        });
+        return;
+      }
+
+      if (levelNodes.length === 1) {
+        positions.set(levelNodes[0].id, { x: Math.round(clamp(width / 2 + drift, leftX, rightX)), y });
+        return;
+      }
+
+      const spacing = Math.min(230, Math.max(150, Math.round(width / Math.max(4, levelNodes.length + 2))));
+      const span = Math.min(rightX - leftX, (levelNodes.length - 1) * spacing);
+      const start = clamp(width / 2 + drift - span / 2, leftX, Math.max(leftX, rightX - span));
+
+      levelNodes.forEach((node, index) => {
+        const alternatingBias = (index % 2 === 0 ? -1 : 1) * Math.min(30, Math.round(spacing * 0.12));
+        const x = clamp(start + index * (span / (levelNodes.length - 1)) + alternatingBias, leftX, rightX);
+        positions.set(node.id, { x: Math.round(x), y });
+      });
+    });
+  }
+
+  assignPositions();
+
+  for (let sweep = 0; sweep < 4; sweep += 1) {
+    for (let level = 1; level < levelNumbers.length; level += 1) {
+      const levelNodes = levels.get(level) || [];
+      if (levelNodes.every((node) => node.kind === "terminal")) {
+        continue;
+      }
+      levels.set(level, orderBddLevel(levelNodes, state.incoming, positions, false));
+    }
+    assignPositions();
+
+    for (let level = levelNumbers.length - 2; level >= 0; level -= 1) {
+      const levelNodes = levels.get(level) || [];
+      if (levelNodes.every((node) => node.kind === "terminal")) {
+        continue;
+      }
+      levels.set(level, orderBddLevel(levelNodes, state.outgoing, positions, true));
+    }
+    assignPositions();
+  }
 
   return positions;
 }
@@ -2880,14 +3104,23 @@ function orderBddLevel(nodes, references, positions, reverse = false) {
 
 function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
   target.innerHTML = "";
+  const hasFixedWidth = Number.isFinite(Number(options.width));
+  const fitToContainer = options.fitToContainer === true || !hasFixedWidth;
+  const minHeight = options.minHeight || 320;
+
   if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
+    const emptyWidth = hasFixedWidth ? Number(options.width) : 760;
+    target.setAttribute("viewBox", `0 0 ${emptyWidth} ${minHeight}`);
+    target.setAttribute("width", String(emptyWidth));
+    target.setAttribute("height", String(minHeight));
+    target.style.width = fitToContainer ? "100%" : `${emptyWidth}px`;
+    target.style.height = `${minHeight}px`;
     return;
   }
 
   const levelGap = 84;
-  const marginX = 320;
-  const baseWidth = options.width || 3000;
-  const minHeight = options.minHeight || 320;
+  const parentWidth = Math.round(target.parentElement?.clientWidth || 0);
+  const baseWidth = hasFixedWidth ? Number(options.width) : Math.max(760, Math.min(1180, parentWidth || 920));
   const maxLevel = Math.max(...graph.nodes.map((node) => node.level));
   const nodesByLevel = new Map();
   graph.nodes.forEach((node) => {
@@ -2896,18 +3129,32 @@ function renderBddGraph(graph, target = workspaceBddGraph, options = {}) {
     }
     nodesByLevel.get(node.level).push(node);
   });
+  const compactLayout = fitToContainer && shouldUseCompactBddLayout(graph);
+  const nodeSpacing = fitToContainer ? 220 : 640;
+  const nodeCountSpacing = fitToContainer ? 72 : 120;
+  const marginX = fitToContainer ? 110 : 320;
   const maxLevelWidth = Math.max(
-    ...[...nodesByLevel.values()].map((levelNodes) => Math.max(1, levelNodes.length) * 640)
+    ...[...nodesByLevel.values()].map((levelNodes) => Math.max(1, levelNodes.length) * nodeSpacing)
   );
-  const width = Math.max(baseWidth, marginX * 2 + maxLevelWidth, marginX * 2 + graph.nodes.length * 120);
-  const height = Math.max(minHeight, (maxLevel + 1) * levelGap + 60);
+  const width = compactLayout
+    ? baseWidth
+    : Math.max(baseWidth, marginX * 2 + maxLevelWidth, marginX * 2 + graph.nodes.length * nodeCountSpacing);
+  const height = Math.max(minHeight, (maxLevel + 1) * levelGap + 120);
+  const parentVisibleWidth = Math.round(target.parentElement?.clientWidth || 0) || 920;
+  const shouldOverflowHorizontally = !compactLayout && width > parentVisibleWidth * 1.08;
   target.setAttribute("viewBox", `0 0 ${width} ${height}`);
   target.setAttribute("width", String(width));
   target.setAttribute("height", String(height));
-  target.style.width = `${width}px`;
+  target.style.width = fitToContainer && !shouldOverflowHorizontally ? "100%" : `${width}px`;
   target.style.height = `${height}px`;
+  target.style.minHeight = `${height}px`;
 
-  const positions = computeBddNodePositions(graph, width, levelGap, marginX);
+  const positions = compactLayout
+    ? computeLayeredDagBddPositions(graph, width, levelGap, marginX)
+    : computeBddNodePositions(graph, width, levelGap, marginX, {
+        minSeparation: fitToContainer ? 180 : undefined,
+        maxDirectionBias: fitToContainer ? 180 : undefined,
+      });
 
   [...graph.edges]
     .sort((left, right) => {
@@ -3054,7 +3301,7 @@ function getModelValidationIssues() {
   }
 
   if (root.children.length === 0) {
-    return [{ nodeId: root.id, message: "Add an AND or OR gate below the top event before running analysis." }];
+    return [{ nodeId: root.id, message: "Add an AND, OR, or Voting gate below the top event before running analysis." }];
   }
 
   errors.push(...getRepeatedEventRateIssues());
@@ -3075,8 +3322,18 @@ function getModelValidationIssues() {
     if (node.children.length === 1) {
       errors.push({
         nodeId: node.id,
-        message: `${node.label} has only one input event. AND/OR gates need at least two inputs.`,
+        message: `${node.label} has only one input event. Gates need at least two inputs.`,
       });
+    }
+
+    if (node.gate === "K_OF_N") {
+      const threshold = parseVotingThreshold(node.votingThreshold || 2);
+      if (threshold > node.children.length) {
+        errors.push({
+          nodeId: node.id,
+          message: `${node.label} needs at least ${threshold} input events for its Voting threshold.`,
+        });
+      }
     }
   });
 
@@ -3178,7 +3435,11 @@ function safeFilename(value) {
 document.querySelectorAll("[data-tool]").forEach((button) => {
   button.addEventListener("click", () => setTool(button.dataset.tool));
 });
-childKindSelect.addEventListener("change", syncToolButtons);
+childKindSelect.addEventListener("change", () => {
+  syncToolButtons();
+  syncVotingThresholdControl();
+});
+nodeKindSelect.addEventListener("change", syncVotingThresholdControl);
 
 document.querySelectorAll("[data-builder-mode]").forEach((button) => {
   button.addEventListener("click", () => setBuilderMode(button.dataset.builderMode));

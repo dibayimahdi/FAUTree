@@ -113,6 +113,7 @@ class FAUTreeRequestHandler(BaseHTTPRequestHandler):
                     "schemaVersion": "0.1.0",
                     "nodeTypes": ["top_event", "intermediate_event", "basic_event", "undeveloped_event", "gate"],
                     "gateTypes": ["AND", "OR", "K_OF_N"],
+                    "gateAttributes": {"K_OF_N": ["votingThreshold"]},
                     "requiredEdges": ["source", "target"],
                 },
             )

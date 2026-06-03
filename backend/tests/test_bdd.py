@@ -183,6 +183,32 @@ class BDDAnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "each leaf event exactly once"):
             compute_bdd_analysis(build_sample_project(), "custom", ("Control unit failure",))
 
+    def test_two_out_of_three_voting_gate_exact_probability(self) -> None:
+        project = FaultTreeProject(
+            schema_version="0.1.0",
+            project=ProjectMetadata(id="voting", name="Voting gate"),
+            analysis=AnalysisSettings(),
+            nodes=[
+                FaultTreeNode("top", "top_event", "Top"),
+                FaultTreeNode("g1", "gate", "Two out of three", gate_type="K_OF_N", voting_threshold=2),
+                FaultTreeNode("a", "basic_event", "A", probability=0.1),
+                FaultTreeNode("b", "basic_event", "B", probability=0.1),
+                FaultTreeNode("c", "basic_event", "C", probability=0.1),
+            ],
+            edges=[
+                FaultTreeEdge("top", "g1"),
+                FaultTreeEdge("g1", "a"),
+                FaultTreeEdge("g1", "b"),
+                FaultTreeEdge("g1", "c"),
+            ],
+        )
+
+        result = compute_bdd_analysis(project, "infix")
+
+        self.assertEqual(result.variable_order, ("A", "B", "C"))
+        self.assertAlmostEqual(result.exact_probability, 0.028)
+        self.assertGreater(result.node_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -63,6 +63,7 @@
               <div class="tool-grid">
                 <button class="tool-button" data-tool="and" title="AND gate tool (A)">AND</button>
                 <button class="tool-button" data-tool="or" title="OR gate tool (O)">OR</button>
+                <button class="tool-button" data-tool="voting" title="Voting gate tool (V)">VOT</button>
               </div>
             </div>
           </div>
@@ -84,11 +85,16 @@
               <option value="intermediate_event">Intermediate event</option>
               <option value="and_gate">AND gate</option>
               <option value="or_gate">OR gate</option>
+              <option value="voting_gate">Voting gate</option>
             </select>
           </label>
           <label class="field">
             <span>Leaf event probability</span>
             <input id="node-rate-input" type="text" value="0.001">
+          </label>
+          <label class="field" id="voting-threshold-field" hidden>
+            <span>Voting threshold (m)</span>
+            <input id="voting-threshold-input" type="number" min="1" step="1" value="2">
           </label>
           <label class="field">
             <span>Child type</span>
@@ -97,6 +103,7 @@
               <option value="undeveloped_event">Undeveloped event</option>
               <option value="and_gate">AND gate</option>
               <option value="or_gate">OR gate</option>
+              <option value="voting_gate">Voting gate</option>
             </select>
           </label>
           <div class="edit-actions">
@@ -311,7 +318,7 @@
           <div class="bdd-action-panel">
             <div class="section-heading">
               <span>BDD View</span>
-              <button class="quiet-button" id="toggle-bdd-workspace">Generate BDD</button>
+              <button class="primary-button bdd-toggle-button" id="toggle-bdd-workspace">Generate BDD</button>
             </div>
           </div>
         </div>
@@ -329,6 +336,7 @@
           <div><dt>Ctrl + S</dt><dd>Apply current node properties</dd></div>
           <div><dt>A</dt><dd>AND gate tool</dd></div>
           <div><dt>O</dt><dd>OR gate tool</dd></div>
+          <div><dt>V</dt><dd>Voting gate tool</dd></div>
           <div><dt>B</dt><dd>Basic Event tool</dd></div>
           <div><dt>U</dt><dd>Undeveloped Event tool</dd></div>
           <div><dt>C</dt><dd>Add Child</dd></div>

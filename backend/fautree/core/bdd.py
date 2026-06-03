@@ -159,7 +159,7 @@ class BDDAnalyzer:
                 raise ValueError(f"{node.label} must connect to exactly one logic gate.")
             child = self._node(child_ids[0])
             if child.type != "gate":
-                raise ValueError(f"{node.label} must connect to an AND or OR gate.")
+                raise ValueError(f"{node.label} must connect to an AND, OR, or Voting gate.")
             return self._build_bdd(child.id, manager)
 
         if node.type != "gate":
@@ -169,10 +169,44 @@ class BDDAnalyzer:
             raise ValueError(f"{node.label} must have at least two input events.")
 
         child_bdds = [self._build_bdd(child_id, manager) for child_id in child_ids]
+        if node.gate_type == "K_OF_N":
+            return self._build_voting_bdd(node, child_bdds, manager)
+
         result = child_bdds[0]
         for child_bdd in child_bdds[1:]:
             result = manager.apply(node.gate_type or "", result, child_bdd)
         return result
+
+    def _build_voting_bdd(self, node: FaultTreeNode, child_bdds: list[int], manager: BDDManager) -> int:
+        threshold = self._voting_threshold(node, len(child_bdds))
+
+        @lru_cache(maxsize=None)
+        def at_least(child_index: int, required: int) -> int:
+            if required <= 0:
+                return BDD_TRUE
+            remaining = len(child_bdds) - child_index
+            if remaining < required:
+                return BDD_FALSE
+            if child_index >= len(child_bdds):
+                return BDD_FALSE
+
+            child = child_bdds[child_index]
+            with_child = manager.apply("AND", child, at_least(child_index + 1, required - 1))
+            without_child = at_least(child_index + 1, required)
+            return manager.apply("OR", with_child, without_child)
+
+        return at_least(0, threshold)
+
+    @staticmethod
+    def _voting_threshold(node: FaultTreeNode, child_count: int) -> int:
+        threshold = node.voting_threshold
+        if threshold is None:
+            raise ValueError(f"{node.label} voting gate needs a threshold.")
+        if threshold < 1:
+            raise ValueError(f"{node.label} voting gate threshold must be at least 1.")
+        if threshold > child_count:
+            raise ValueError(f"{node.label} voting gate threshold cannot exceed its number of inputs.")
+        return threshold
 
     def _variable_order(self) -> tuple[str, ...]:
         labels = self._basic_event_labels_in_infix_order()

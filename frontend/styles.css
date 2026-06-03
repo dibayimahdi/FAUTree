@@ -401,7 +401,9 @@ button {
 }
 
 .builder-panel[data-diagram-panel="bdd"].is-active {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .panel-block[data-builder-panel]:not(.is-active) {
@@ -603,6 +605,12 @@ button {
   stroke: #17384d;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
+}
+
+.gate-symbol text {
+  fill: #fff;
+  font-size: 18px;
+  font-weight: 900;
 }
 
 .gate-node.is-selected .gate-symbol path,
@@ -985,6 +993,18 @@ th {
   border-top: 1px solid var(--line);
 }
 
+.bdd-toggle-button {
+  height: 38px;
+  min-width: 11.5rem;
+  padding: 0 14px;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
 .bdd-graph {
   width: 100%;
   min-height: 320px;
@@ -999,11 +1019,14 @@ th {
 
 .bdd-workspace-panel {
   padding: 0 18px 18px;
+  flex: 1;
+  min-height: 0;
 }
 
 .bdd-workspace-wrap {
-  height: calc(100% - 8px);
-  min-height: 520px;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1019,10 +1042,11 @@ th {
 }
 
 .bdd-workspace-graph {
-  width: min(920px, 100%);
-  min-height: 360px;
-  max-height: 520px;
-  align-self: center;
+  width: 100%;
+  min-height: 560px;
+  height: auto;
+  max-height: none;
+  align-self: flex-start;
   border: 0;
   border-radius: 0;
   background: transparent;

@@ -136,6 +136,60 @@ class MinimalCutSetTests(unittest.TestCase):
             [("A",), ("Unspecified cause",)],
         )
 
+    def test_two_out_of_three_voting_gate_cut_sets(self) -> None:
+        project = FaultTreeProject(
+            schema_version="0.1.0",
+            project=ProjectMetadata(id="voting", name="Voting gate"),
+            analysis=AnalysisSettings(),
+            nodes=[
+                FaultTreeNode("top", "top_event", "Top"),
+                FaultTreeNode("g1", "gate", "Two out of three", gate_type="K_OF_N", voting_threshold=2),
+                FaultTreeNode("a", "basic_event", "A"),
+                FaultTreeNode("b", "basic_event", "B"),
+                FaultTreeNode("c", "basic_event", "C"),
+            ],
+            edges=[
+                FaultTreeEdge("top", "g1"),
+                FaultTreeEdge("g1", "a"),
+                FaultTreeEdge("g1", "b"),
+                FaultTreeEdge("g1", "c"),
+            ],
+        )
+
+        cut_sets = compute_minimal_cut_sets(project)
+
+        self.assertEqual(
+            [set(cut_set.event_labels) for cut_set in cut_sets],
+            [
+                {"A", "B"},
+                {"A", "C"},
+                {"B", "C"},
+            ],
+        )
+
+    def test_voting_gate_threshold_cannot_exceed_input_count(self) -> None:
+        project = FaultTreeProject(
+            schema_version="0.1.0",
+            project=ProjectMetadata(id="voting-invalid", name="Invalid Voting gate"),
+            analysis=AnalysisSettings(),
+            nodes=[
+                FaultTreeNode("top", "top_event", "Top"),
+                FaultTreeNode("g1", "gate", "Impossible vote", gate_type="K_OF_N", voting_threshold=4),
+                FaultTreeNode("a", "basic_event", "A"),
+                FaultTreeNode("b", "basic_event", "B"),
+                FaultTreeNode("c", "basic_event", "C"),
+            ],
+            edges=[
+                FaultTreeEdge("top", "g1"),
+                FaultTreeEdge("g1", "a"),
+                FaultTreeEdge("g1", "b"),
+                FaultTreeEdge("g1", "c"),
+            ],
+        )
+
+        with self.assertRaisesRegex(ValueError, "threshold cannot exceed"):
+            compute_minimal_cut_sets(project)
+
 
 if __name__ == "__main__":
     unittest.main()
