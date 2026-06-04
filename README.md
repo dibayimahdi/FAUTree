@@ -1,6 +1,6 @@
 # FAUTree
 
-FAUTree is a web-based Fault Tree Analysis (FTA) platform that combines graphical modeling, Boolean expression construction, and advanced analysis capabilities within a unified environment.
+FAUTree is a comprehensive web-based Fault Tree Analysis (FTA) platform consisting of a modern interactive frontend and a robust Python analysis backend. The project implements advanced algorithms for minimal cut sets, Binary Decision Diagrams, and quantitative failure analysis - developed as part of ongoing PhD research at FAUErlangen-Nürnberg. FAUTree combines graphical modeling, Boolean expression construction, and advanced analysis capabilities within a unified environment.
 
 ![FAUTree graphical fault tree builder with analysis results](docs/images/fautree-screenshot.png)
 
