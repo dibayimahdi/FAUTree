@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FAUTree</title>
-    <link rel="stylesheet" href="./styles.css?v=20260530-boolean-expression-builder">
+    <link rel="stylesheet" href="./styles.css?v=20260604-hidden-fields">
   </head>
   <body>
     <div class="app-shell">
@@ -93,7 +93,7 @@
             <input id="node-rate-input" type="text" value="0.001">
           </label>
           <label class="field" id="voting-threshold-field" hidden>
-            <span>Voting threshold (m)</span>
+            <span>Voting threshold (k)</span>
             <input id="voting-threshold-input" type="number" min="1" step="1" value="2">
           </label>
           <label class="field">
@@ -239,10 +239,6 @@
               <strong id="summary-largest-order">pending</strong>
             </article>
             <article>
-              <span>Top probability</span>
-              <strong id="summary-top-probability">pending</strong>
-            </article>
-            <article>
               <span>Dominant cut set</span>
               <strong id="summary-dominant-cut-set">pending</strong>
             </article>
@@ -288,10 +284,6 @@
             <article>
               <span>Top event probability</span>
               <strong id="metric-top-probability">pending</strong>
-            </article>
-            <article>
-              <span>Approximation</span>
-              <strong>Cut set</strong>
             </article>
           </div>
         </div>
@@ -389,6 +381,6 @@
       </section>
     </div>
 
-    <script src="./app.js?v=20260603-diagram-export-flow"></script>
+    <script src="./app.js?v=20260604-voting-threshold-selected-gate"></script>
   </body>
 </html>

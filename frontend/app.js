@@ -71,7 +71,6 @@ const summaryCutSetCount = document.querySelector("#summary-cut-set-count");
 const summaryMinOrder = document.querySelector("#summary-min-order");
 const summarySinglePoints = document.querySelector("#summary-single-points");
 const summaryLargestOrder = document.querySelector("#summary-largest-order");
-const summaryTopProbability = document.querySelector("#summary-top-probability");
 const summaryDominantCutSet = document.querySelector("#summary-dominant-cut-set");
 const summaryAnalysisTime = document.querySelector("#summary-analysis-time");
 const summaryBasicEvents = document.querySelector("#summary-basic-events");
@@ -339,9 +338,7 @@ function gateDisplayName(node) {
     return "None";
   }
   if (node.gate === "K_OF_N") {
-    const threshold = Number(node.votingThreshold || 2);
-    const childCount = node.children?.length || "N";
-    return `Voting ${threshold}oo${childCount}`;
+    return `Voting ${formatVotingGateLabel(node.votingThreshold || 2, node.children?.length)}`;
   }
   return node.gate || "None";
 }
@@ -356,9 +353,8 @@ function syncVotingThresholdControl() {
     return;
   }
   const selected = model.nodes[selectedNodeId];
-  const isVotingSelection = selected?.kind === "gate" && selected.gate === "K_OF_N";
-  const isVotingEdit = nodeKindSelect.value === "voting_gate" || childKindSelect.value === "voting_gate";
-  votingThresholdField.hidden = !(isVotingSelection || isVotingEdit);
+  const isVotingGate = selected?.kind === "gate" && selected.gate === "K_OF_N";
+  votingThresholdField.hidden = !isVotingGate;
   votingThresholdInput.disabled = votingThresholdField.hidden;
 }
 
@@ -373,7 +369,7 @@ function createGateSymbol(gate, threshold = 2, childCount = "N") {
   }
 
   if (gate === "K_OF_N") {
-    const label = `${parseVotingThreshold(threshold)}oo${Number(childCount) > 0 ? childCount : "N"}`;
+    const label = formatVotingGateLabel(threshold, childCount);
     return `
       <svg class="gate-symbol" viewBox="0 0 100 100" aria-hidden="true">
         <path d="M14 88 C24 58 26 24 50 8 C74 24 76 58 86 88 C64 78 36 78 14 88 Z"></path>
@@ -389,6 +385,12 @@ function createGateSymbol(gate, threshold = 2, childCount = "N") {
     </svg>
     <span class="sr-only">OR gate</span>
   `;
+}
+
+function formatVotingGateLabel(threshold, childCount) {
+  const k = parseVotingThreshold(threshold);
+  const n = Number(childCount);
+  return `${k}/${Number.isFinite(n) && n > 0 ? n : "N"}`;
 }
 
 function nodeKindLabel(node) {
@@ -1848,7 +1850,7 @@ function buildFaultTreeExportSvg() {
       label.setAttribute("y", position.y + 82);
       label.setAttribute("class", "gate-label");
       label.setAttribute("text-anchor", "middle");
-      label.textContent = node.gate === "K_OF_N" ? `${parseVotingThreshold(node.votingThreshold || 2)}oo${node.children.length || "N"}` : node.gate;
+      label.textContent = node.gate === "K_OF_N" ? formatVotingGateLabel(node.votingThreshold || 2, node.children.length) : node.gate;
       svg.append(label);
       return;
     }
@@ -2797,7 +2799,6 @@ function clearAnalysisSummary() {
   summaryMinOrder.textContent = "pending";
   summarySinglePoints.textContent = "pending";
   summaryLargestOrder.textContent = "pending";
-  summaryTopProbability.textContent = "pending";
   summaryDominantCutSet.textContent = "pending";
   summaryAnalysisTime.textContent = "pending";
   summaryBasicEvents.textContent = String(getLeafEventNodes().length);
@@ -3226,7 +3227,6 @@ function renderAnalysisSummary(cutSets, topProbability, analysisDuration, bdd) {
   summaryMinOrder.textContent = orders.length > 0 ? String(Math.min(...orders)) : "none";
   summarySinglePoints.textContent = String(singlePointFailures);
   summaryLargestOrder.textContent = orders.length > 0 ? String(Math.max(...orders)) : "none";
-  summaryTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
   summaryDominantCutSet.textContent = dominant ? `{ ${dominant.events.join(", ")} }` : "none";
   summaryAnalysisTime.textContent = `${Math.max(1, Math.round(analysisDuration))} ms`;
   summaryBasicEvents.textContent = String(getLeafEventNodes().length);
@@ -3331,7 +3331,7 @@ function getModelValidationIssues() {
       if (threshold > node.children.length) {
         errors.push({
           nodeId: node.id,
-          message: `${node.label} needs at least ${threshold} input events for its Voting threshold.`,
+          message: `${node.label} needs at least ${threshold} input events for its voting threshold (k).`,
         });
       }
     }
