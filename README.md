@@ -14,13 +14,6 @@ FAUTree is a web-based Fault Tree Analysis (FTA) platform that combines graphica
 * Binary Decision Diagram (BDD) generation and visualization
 * Integrated project management and analysis workflow
 
-## Live Demonstration
-
-Coming soon at:
-
-https://fautree.com
-
-A public demonstration of the platform will be available through the link above.
 
 ## Technology Stack
 
