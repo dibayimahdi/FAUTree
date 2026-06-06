@@ -50,7 +50,7 @@ FAUTree is connected to research on fault tree analysis, Binary Decision Diagram
 
 FAUTree is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0-or-later).
 
-Copyright © 2026 MAhdi Dibaei Asl.
+Copyright © 2026 Mahdi Dibaei Asl.
 
 ## Contact
 
