@@ -962,7 +962,7 @@ th {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
 }
 
@@ -990,6 +990,125 @@ th {
   line-height: 1.2;
   letter-spacing: 0;
   overflow-wrap: anywhere;
+}
+
+.reliability-action-panel {
+  margin-top: 14px;
+  padding: 14px 18px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(18, 107, 100, 0.05), rgba(255, 253, 249, 0.95)),
+    #fffdf9;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.reliability-open-button {
+  min-width: 13rem;
+}
+
+.reliability-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.reliability-field {
+  margin-bottom: 0;
+}
+
+.reliability-field input {
+  font-variant-numeric: tabular-nums;
+}
+
+.reliability-chart {
+  display: block;
+  width: 100%;
+  min-height: min(58vh, 520px);
+  border: 1px solid rgba(49, 95, 125, 0.14);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at top right, rgba(18, 107, 100, 0.08), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 247, 240, 0.95));
+}
+
+.reliability-chart text {
+  fill: var(--ink);
+  font-family: inherit;
+}
+
+.reliability-chart .axis-line {
+  stroke: rgba(49, 95, 125, 0.42);
+  stroke-width: 1.4;
+}
+
+.reliability-chart .grid-line {
+  stroke: rgba(49, 95, 125, 0.12);
+  stroke-width: 1;
+}
+
+.reliability-chart .curve-line {
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.reliability-chart .curve-fill {
+  fill: rgba(18, 107, 100, 0.12);
+}
+
+.reliability-chart .curve-marker {
+  fill: #126b64;
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.reliability-chart .chart-title {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.reliability-chart .chart-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reliability-chart .chart-tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.reliability-modal-backdrop {
+  padding: 18px;
+}
+
+.reliability-modal-panel {
+  width: min(1120px, 100%);
+  max-height: min(860px, 94vh);
+}
+
+.reliability-modal-header {
+  align-items: flex-start;
+}
+
+.reliability-modal-header code {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.reliability-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.reliability-modal-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
 }
 
 .bdd-action-panel {

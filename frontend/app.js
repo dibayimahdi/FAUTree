@@ -3,6 +3,12 @@ const emptyTextModel = "";
 const API_BASE_URL = window.location.hostname === "localhost" ? "http://localhost:8000" : "https://api.fautree.com";
 const analysisApiUrl = `${API_BASE_URL}/api/analyze/minimal-cut-sets`;
 const bddApiUrl = `${API_BASE_URL}/api/analyze/bdd`;
+const defaultReliabilityViewport = {
+  xMinHours: 0,
+  xMaxHours: 8760,
+  yMin: 0,
+  yMax: 1.05,
+};
 
 let projectName = "Untitled Fault Tree";
 let selectedNodeId = "top";
@@ -17,6 +23,7 @@ let redoStack = [];
 let lastBddGraph = null;
 let lastBddAnalysis = null;
 let lastAnalysisSnapshot = null;
+let lastReliabilityState = null;
 let resultsPaneResizeState = null;
 let customBddOrder = [];
 
@@ -45,10 +52,19 @@ const bddOrderingSelect = document.querySelector("#bdd-ordering-select");
 const qualitativeTableBody = document.querySelector("[data-result-panel='qualitative'] tbody");
 const metricMissionTime = document.querySelector("#metric-mission-time");
 const metricTopProbability = document.querySelector("#metric-top-probability");
+const metricReliabilityLambda = document.querySelector("#metric-reliability-lambda");
+const metricReliabilityAtMission = document.querySelector("#metric-reliability-at-mission");
 const metricVariableCount = document.querySelector("#metric-variable-count");
 const metricBddOrdering = document.querySelector("#metric-bdd-ordering");
 const metricBddNodes = document.querySelector("#metric-bdd-nodes");
 const metricBddVariableOrder = document.querySelector("#metric-bdd-variable-order");
+const reliabilityMissionTimeInput = document.querySelector("#reliability-mission-time");
+const reliabilityXMinInput = document.querySelector("#reliability-x-min");
+const reliabilityXMaxInput = document.querySelector("#reliability-x-max");
+const reliabilityYMinInput = document.querySelector("#reliability-y-min");
+const reliabilityYMaxInput = document.querySelector("#reliability-y-max");
+const reliabilitySourceNote = document.querySelector("#reliability-source-note");
+const reliabilityChart = document.querySelector("#reliability-chart");
 const bddCustomOrderField = document.querySelector("#bdd-custom-order-field");
 const bddCustomOrderNote = document.querySelector("#bdd-custom-order-note");
 const bddCustomOrderList = document.querySelector("#bdd-custom-order-list");
@@ -56,6 +72,9 @@ const bddSettingsPanel = document.querySelector("#bdd-settings-panel");
 const resultsPane = document.querySelector(".results-pane");
 const workspaceBddGraph = document.querySelector("#workspace-bdd-graph");
 const toggleBddWorkspaceButton = document.querySelector("#toggle-bdd-workspace");
+const reliabilityModal = document.querySelector("#reliability-modal");
+const showReliabilityGraphButton = document.querySelector("#show-reliability-graph");
+const closeReliabilityButton = document.querySelector("#close-reliability");
 const shortcutsModal = document.querySelector("#shortcuts-modal");
 const showShortcutsButton = document.querySelector("#show-shortcuts");
 const closeShortcutsButton = document.querySelector("#close-shortcuts");
@@ -88,6 +107,459 @@ function setResultsPaneHeight(height) {
   const maxHeight = Math.max(minHeight, viewportHeight - topbarHeight - reservedWorkspaceHeight);
   const clampedHeight = Math.max(minHeight, Math.min(height, maxHeight));
   appShell?.style.setProperty("--results-pane-height", `${clampedHeight}px`);
+}
+
+function getReliabilityMissionTimeHours() {
+  const parsed = Number(reliabilityMissionTimeInput?.value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 8760;
+}
+
+function setReliabilityMissionTimeHours(value, rerender = true) {
+  const normalized = Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 8760;
+  if (reliabilityMissionTimeInput) {
+    reliabilityMissionTimeInput.value = String(normalized);
+  }
+  if (metricMissionTime) {
+    metricMissionTime.textContent = `${formatNumber(normalized)} h`;
+  }
+  if (rerender) {
+    updateReliabilityView();
+  }
+}
+
+function getReliabilityAxisInputValue(input, fallback) {
+  const parsed = Number(input?.value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getReliabilityViewport() {
+  const xMinHours = Math.max(0, getReliabilityAxisInputValue(reliabilityXMinInput, defaultReliabilityViewport.xMinHours));
+  let xMaxHours = Math.max(0, getReliabilityAxisInputValue(reliabilityXMaxInput, getReliabilityMissionTimeHours()));
+  const yMin = getReliabilityAxisInputValue(reliabilityYMinInput, defaultReliabilityViewport.yMin);
+  let yMax = getReliabilityAxisInputValue(reliabilityYMaxInput, defaultReliabilityViewport.yMax);
+
+  if (xMaxHours <= xMinHours) {
+    xMaxHours = xMinHours + 1;
+  }
+  if (yMax <= yMin) {
+    yMax = yMin + 1;
+  }
+
+  return { xMinHours, xMaxHours, yMin, yMax };
+}
+
+function setReliabilityViewport(viewport = {}, rerender = true) {
+  const normalized = normalizeReliabilityViewport(viewport);
+  if (reliabilityXMinInput) {
+    reliabilityXMinInput.value = String(normalized.xMinHours);
+  }
+  if (reliabilityXMaxInput) {
+    reliabilityXMaxInput.value = String(normalized.xMaxHours);
+  }
+  if (reliabilityYMinInput) {
+    reliabilityYMinInput.value = String(normalized.yMin);
+  }
+  if (reliabilityYMaxInput) {
+    reliabilityYMaxInput.value = String(normalized.yMax);
+  }
+  if (rerender) {
+    updateReliabilityView();
+  }
+}
+
+function normalizeReliabilityViewport(viewport = {}) {
+  const xMinHours = Math.max(0, Number.isFinite(Number(viewport.xMinHours)) ? Number(viewport.xMinHours) : defaultReliabilityViewport.xMinHours);
+  let xMaxHours = Number.isFinite(Number(viewport.xMaxHours)) ? Number(viewport.xMaxHours) : getReliabilityMissionTimeHours();
+  const yMin = Number.isFinite(Number(viewport.yMin)) ? Number(viewport.yMin) : defaultReliabilityViewport.yMin;
+  let yMax = Number.isFinite(Number(viewport.yMax)) ? Number(viewport.yMax) : defaultReliabilityViewport.yMax;
+
+  xMaxHours = Math.max(0, xMaxHours);
+  if (xMaxHours <= xMinHours) {
+    xMaxHours = xMinHours + 1;
+  }
+  if (yMax <= yMin) {
+    yMax = yMin + 1;
+  }
+
+  return { xMinHours, xMaxHours, yMin, yMax };
+}
+
+function roundReliabilityAxisLimit(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return defaultReliabilityViewport.xMaxHours;
+  }
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const rounded = Math.round((value / magnitude) * 10) / 10 * magnitude;
+  return Math.max(Number(rounded.toPrecision(12)), Number((value * 0.98).toPrecision(12)));
+}
+
+function getAutoReliabilityViewport(lambda, missionTimeHours = getReliabilityMissionTimeHours()) {
+  const targetReliability = 0.03;
+  const rawXMax = lambda > 0
+    ? -Math.log(targetReliability) / lambda
+    : Math.max(missionTimeHours, defaultReliabilityViewport.xMaxHours);
+
+  return {
+    xMinHours: 0,
+    xMaxHours: roundReliabilityAxisLimit(rawXMax),
+    yMin: -0.1,
+    yMax: 1.2,
+  };
+}
+
+function applyAutoReliabilityViewport(lambda = getTopEventProbabilityForReliability()) {
+  if (!Number.isFinite(lambda)) {
+    setReliabilityViewport(defaultReliabilityViewport, false);
+    return;
+  }
+  setReliabilityViewport(getAutoReliabilityViewport(Math.max(0, lambda)), false);
+}
+
+function getTopEventProbabilityForReliability() {
+  const exactProbability = Number(lastBddAnalysis?.exactProbability);
+  if (Number.isFinite(exactProbability)) {
+    return clamp(exactProbability, 0, 1);
+  }
+
+  const approximateProbability = Number(lastAnalysisSnapshot?.topProbability);
+  if (Number.isFinite(approximateProbability)) {
+    return clamp(approximateProbability, 0, 1);
+  }
+
+  return null;
+}
+
+function buildReliabilityState(topProbability, missionTimeHours, viewport = getReliabilityViewport()) {
+  if (!Number.isFinite(topProbability) || !Number.isFinite(missionTimeHours) || missionTimeHours <= 0) {
+    return null;
+  }
+
+  const lambda = Math.max(0, topProbability);
+  const normalizedViewport = normalizeReliabilityViewport(viewport);
+  const sampleCount = 160;
+  const points = [];
+  for (let index = 0; index <= sampleCount; index += 1) {
+    const t = normalizedViewport.xMinHours + ((normalizedViewport.xMaxHours - normalizedViewport.xMinHours) * index) / sampleCount;
+    const reliability = Math.exp(-lambda * t);
+    points.push({ t, reliability });
+  }
+
+  return {
+    probability: topProbability,
+    missionTimeHours,
+    lambda,
+    reliabilityAtMission: Math.exp(-lambda * missionTimeHours),
+    viewport: normalizedViewport,
+    points,
+  };
+}
+
+function updateReliabilityView() {
+  const probability = getTopEventProbabilityForReliability();
+  const missionTimeHours = getReliabilityMissionTimeHours();
+  if (Number.isFinite(probability)) {
+    setReliabilityViewport(getAutoReliabilityViewport(Math.max(0, probability), missionTimeHours), false);
+  }
+  const state = buildReliabilityState(probability, missionTimeHours, getReliabilityViewport());
+  lastReliabilityState = state;
+
+  if (!state) {
+    if (metricReliabilityLambda) {
+      metricReliabilityLambda.textContent = "pending";
+    }
+    if (metricReliabilityAtMission) {
+      metricReliabilityAtMission.textContent = "pending";
+    }
+    if (reliabilitySourceNote) {
+      reliabilitySourceNote.textContent =
+        "The reliability curve will be derived from the current top-event probability using R(t) = exp(-λt).";
+    }
+    renderReliabilityChart(null);
+    return;
+  }
+
+  if (metricReliabilityLambda) {
+    metricReliabilityLambda.textContent = formatNumber(state.lambda);
+  }
+  if (metricReliabilityAtMission) {
+    metricReliabilityAtMission.textContent = formatNumber(state.reliabilityAtMission);
+  }
+  if (reliabilitySourceNote) {
+    const sourceLabel = Number.isFinite(Number(lastBddAnalysis?.exactProbability))
+      ? "BDD exact probability"
+      : "rare-event cut-set approximation";
+    reliabilitySourceNote.textContent =
+      `The reliability curve is anchored to the current top-event failure probability from the ${sourceLabel}. ` +
+      `It uses R(t) = exp(-λt) with λ = ${formatNumber(state.lambda)} for t >= 0.`;
+  }
+  renderReliabilityChart(state);
+}
+
+function renderReliabilityChart(state, emptyMessage = "Run analysis to draw the reliability curve.") {
+  if (!reliabilityChart) {
+    return;
+  }
+
+  reliabilityChart.innerHTML = "";
+  if (!state) {
+    const width = 960;
+    const height = 520;
+    const margin = { top: 44, right: 36, bottom: 72, left: 86 };
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
+    const viewport = getReliabilityViewport();
+
+    const title = createSvgNode("text");
+    title.setAttribute("x", String(margin.left));
+    title.setAttribute("y", "24");
+    title.setAttribute("class", "chart-title");
+    title.textContent = "System reliability curve";
+    reliabilityChart.appendChild(title);
+
+    [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
+      const y = margin.top + (1 - tick) * plotHeight;
+      const grid = createSvgNode("line");
+      grid.setAttribute("x1", String(margin.left));
+      grid.setAttribute("x2", String(width - margin.right));
+      grid.setAttribute("y1", String(y));
+      grid.setAttribute("y2", String(y));
+      grid.setAttribute("class", "grid-line");
+      reliabilityChart.appendChild(grid);
+
+      const label = createSvgNode("text");
+      label.setAttribute("x", String(margin.left - 10));
+      label.setAttribute("y", String(y + 4));
+      label.setAttribute("text-anchor", "end");
+      label.setAttribute("class", "chart-tick");
+      label.textContent = formatNumber(viewport.yMin + tick * (viewport.yMax - viewport.yMin));
+      reliabilityChart.appendChild(label);
+    });
+
+    [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
+      const x = margin.left + tick * plotWidth;
+      const grid = createSvgNode("line");
+      grid.setAttribute("x1", String(x));
+      grid.setAttribute("x2", String(x));
+      grid.setAttribute("y1", String(margin.top));
+      grid.setAttribute("y2", String(height - margin.bottom));
+      grid.setAttribute("class", "grid-line");
+      reliabilityChart.appendChild(grid);
+
+      const label = createSvgNode("text");
+      label.setAttribute("x", String(x));
+      label.setAttribute("y", String(height - margin.bottom + 22));
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("class", "chart-tick");
+      label.textContent = `${formatNumber(viewport.xMinHours + tick * (viewport.xMaxHours - viewport.xMinHours))} h`;
+      reliabilityChart.appendChild(label);
+    });
+
+    const yAxis = createSvgNode("line");
+    yAxis.setAttribute("x1", String(margin.left));
+    yAxis.setAttribute("x2", String(margin.left));
+    yAxis.setAttribute("y1", String(margin.top));
+    yAxis.setAttribute("y2", String(height - margin.bottom));
+    yAxis.setAttribute("class", "axis-line");
+    reliabilityChart.appendChild(yAxis);
+
+    const xAxis = createSvgNode("line");
+    xAxis.setAttribute("x1", String(margin.left));
+    xAxis.setAttribute("x2", String(width - margin.right));
+    xAxis.setAttribute("y1", String(height - margin.bottom));
+    xAxis.setAttribute("y2", String(height - margin.bottom));
+    xAxis.setAttribute("class", "axis-line");
+    reliabilityChart.appendChild(xAxis);
+
+    const yLabel = createSvgNode("text");
+    yLabel.setAttribute("x", "20");
+    yLabel.setAttribute("y", String(margin.top + plotHeight / 2));
+    yLabel.setAttribute("transform", `rotate(-90 20 ${margin.top + plotHeight / 2})`);
+    yLabel.setAttribute("class", "chart-label");
+    yLabel.textContent = "Reliability R(t)";
+    reliabilityChart.appendChild(yLabel);
+
+    const xLabel = createSvgNode("text");
+    xLabel.setAttribute("x", String(margin.left + plotWidth / 2));
+    xLabel.setAttribute("y", String(height - 10));
+    xLabel.setAttribute("text-anchor", "middle");
+    xLabel.setAttribute("class", "chart-label");
+    xLabel.textContent = "Time t (hours)";
+    reliabilityChart.appendChild(xLabel);
+
+    const emptyText = createSvgNode("text");
+    emptyText.setAttribute("x", String(margin.left + plotWidth / 2));
+    emptyText.setAttribute("y", String(margin.top + plotHeight / 2));
+    emptyText.setAttribute("text-anchor", "middle");
+    emptyText.setAttribute("dominant-baseline", "middle");
+    emptyText.setAttribute("class", "chart-label");
+    emptyText.textContent = emptyMessage;
+    reliabilityChart.appendChild(emptyText);
+    return;
+  }
+
+  const width = 960;
+  const height = 520;
+  const margin = { top: 44, right: 36, bottom: 72, left: 86 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const { xMinHours, xMaxHours, yMin, yMax } = state.viewport;
+  const xRange = xMaxHours - xMinHours;
+  const yRange = yMax - yMin;
+  const xScale = (t) => margin.left + ((t - xMinHours) / xRange) * plotWidth;
+  const yScale = (value) => margin.top + ((yMax - value) / yRange) * plotHeight;
+  const linePoints = state.points.map((point) => `${xScale(point.t)},${yScale(point.reliability)}`).join(" ");
+  const baseValue = yMin <= 0 && yMax >= 0 ? 0 : yMin;
+  const baselineY = yScale(baseValue);
+  const horizonX = xScale(state.missionTimeHours);
+  const horizonY = yScale(state.reliabilityAtMission);
+  const missionPointVisible =
+    state.missionTimeHours >= xMinHours &&
+    state.missionTimeHours <= xMaxHours &&
+    state.reliabilityAtMission >= yMin &&
+    state.reliabilityAtMission <= yMax;
+
+  const title = createSvgNode("text");
+  title.setAttribute("x", String(margin.left));
+  title.setAttribute("y", "18");
+  title.setAttribute("class", "chart-title");
+  title.textContent = "System reliability curve";
+  reliabilityChart.appendChild(title);
+
+  const subtitle = createSvgNode("text");
+  subtitle.setAttribute("x", String(width - margin.right));
+  subtitle.setAttribute("y", "18");
+  subtitle.setAttribute("text-anchor", "end");
+  subtitle.setAttribute("class", "chart-label");
+  subtitle.textContent = `λ = ${formatNumber(state.lambda)}, R(T) = ${formatNumber(state.reliabilityAtMission)}`;
+  reliabilityChart.appendChild(subtitle);
+
+  [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
+    const value = yMin + tick * yRange;
+    const y = yScale(value);
+    const grid = createSvgNode("line");
+    grid.setAttribute("x1", String(margin.left));
+    grid.setAttribute("x2", String(width - margin.right));
+    grid.setAttribute("y1", String(y));
+    grid.setAttribute("y2", String(y));
+    grid.setAttribute("class", "grid-line");
+    reliabilityChart.appendChild(grid);
+
+    const label = createSvgNode("text");
+    label.setAttribute("x", String(margin.left - 10));
+    label.setAttribute("y", String(y + 4));
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("class", "chart-tick");
+    label.textContent = formatNumber(value);
+    reliabilityChart.appendChild(label);
+  });
+
+  [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
+    const x = margin.left + tick * plotWidth;
+    const value = xMinHours + tick * xRange;
+    const grid = createSvgNode("line");
+    grid.setAttribute("x1", String(x));
+    grid.setAttribute("x2", String(x));
+    grid.setAttribute("y1", String(margin.top));
+    grid.setAttribute("y2", String(height - margin.bottom));
+    grid.setAttribute("class", "grid-line");
+    reliabilityChart.appendChild(grid);
+
+    const label = createSvgNode("text");
+    label.setAttribute("x", String(x));
+    label.setAttribute("y", String(height - margin.bottom + 22));
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("class", "chart-tick");
+    label.textContent = `${formatNumber(value)} h`;
+    reliabilityChart.appendChild(label);
+  });
+
+  const defs = createSvgNode("defs");
+  const clipPath = createSvgNode("clipPath");
+  clipPath.setAttribute("id", "reliability-plot-clip");
+  const clipRect = createSvgNode("rect");
+  clipRect.setAttribute("x", String(margin.left));
+  clipRect.setAttribute("y", String(margin.top));
+  clipRect.setAttribute("width", String(plotWidth));
+  clipRect.setAttribute("height", String(plotHeight));
+  clipPath.appendChild(clipRect);
+  defs.appendChild(clipPath);
+  reliabilityChart.appendChild(defs);
+
+  const yAxis = createSvgNode("line");
+  yAxis.setAttribute("x1", String(margin.left));
+  yAxis.setAttribute("x2", String(margin.left));
+  yAxis.setAttribute("y1", String(margin.top));
+  yAxis.setAttribute("y2", String(height - margin.bottom));
+  yAxis.setAttribute("class", "axis-line");
+  reliabilityChart.appendChild(yAxis);
+
+  const xAxis = createSvgNode("line");
+  xAxis.setAttribute("x1", String(margin.left));
+  xAxis.setAttribute("x2", String(width - margin.right));
+  xAxis.setAttribute("y1", String(height - margin.bottom));
+  xAxis.setAttribute("y2", String(height - margin.bottom));
+  xAxis.setAttribute("class", "axis-line");
+  reliabilityChart.appendChild(xAxis);
+
+  if (yMin < 0 && yMax > 0) {
+    const zeroLine = createSvgNode("line");
+    zeroLine.setAttribute("x1", String(margin.left));
+    zeroLine.setAttribute("x2", String(width - margin.right));
+    zeroLine.setAttribute("y1", String(yScale(0)));
+    zeroLine.setAttribute("y2", String(yScale(0)));
+    zeroLine.setAttribute("class", "axis-line");
+    reliabilityChart.appendChild(zeroLine);
+  }
+
+  const yLabel = createSvgNode("text");
+  yLabel.setAttribute("x", "20");
+  yLabel.setAttribute("y", String(margin.top + plotHeight / 2));
+  yLabel.setAttribute("transform", `rotate(-90 20 ${margin.top + plotHeight / 2})`);
+  yLabel.setAttribute("class", "chart-label");
+  yLabel.textContent = "Reliability R(t)";
+  reliabilityChart.appendChild(yLabel);
+
+  const xLabel = createSvgNode("text");
+  xLabel.setAttribute("x", String(margin.left + plotWidth / 2));
+  xLabel.setAttribute("y", String(height - 10));
+  xLabel.setAttribute("text-anchor", "middle");
+  xLabel.setAttribute("class", "chart-label");
+  xLabel.textContent = "Time t (hours)";
+  reliabilityChart.appendChild(xLabel);
+
+  const clippedLayer = createSvgNode("g");
+  clippedLayer.setAttribute("clip-path", "url(#reliability-plot-clip)");
+
+  const area = createSvgNode("polygon");
+  area.setAttribute(
+    "points",
+    `${xScale(xMinHours)},${baselineY} ${linePoints} ${xScale(xMaxHours)},${baselineY}`
+  );
+  area.setAttribute("class", "curve-fill");
+  clippedLayer.appendChild(area);
+
+  const path = createSvgNode("polyline");
+  path.setAttribute("points", linePoints);
+  path.setAttribute("class", "curve-line");
+  clippedLayer.appendChild(path);
+  reliabilityChart.appendChild(clippedLayer);
+
+  if (missionPointVisible) {
+    const marker = createSvgNode("circle");
+    marker.setAttribute("cx", String(horizonX));
+    marker.setAttribute("cy", String(horizonY));
+    marker.setAttribute("r", "5.5");
+    marker.setAttribute("class", "curve-marker");
+    reliabilityChart.appendChild(marker);
+
+    const markerLabel = createSvgNode("text");
+    markerLabel.setAttribute("x", String(Math.min(width - margin.right - 4, horizonX - 8)));
+    markerLabel.setAttribute("y", String(Math.max(margin.top + 12, horizonY - 10)));
+    markerLabel.setAttribute("text-anchor", "end");
+    markerLabel.setAttribute("class", "chart-tick");
+    markerLabel.textContent = `R(T) = ${formatNumber(state.reliabilityAtMission)}`;
+    reliabilityChart.appendChild(markerLabel);
+  }
 }
 
 function syncBddSettingsVisibility() {
@@ -781,6 +1253,8 @@ function createHistorySnapshot() {
     nodeSequence,
     bddOrdering: bddOrderingSelect.value,
     bddCustomOrder: [...customBddOrder],
+    analysisMissionTimeHours: getReliabilityMissionTimeHours(),
+    reliabilityViewport: getReliabilityViewport(),
   };
 }
 
@@ -800,6 +1274,8 @@ function restoreHistorySnapshot(snapshot, message) {
   bddOrderingSelect.value = snapshot.bddOrdering;
   syncCustomBddOrder(snapshot.bddCustomOrder || []);
   setProjectName(projectName);
+  setReliabilityMissionTimeHours(snapshot.analysisMissionTimeHours, false);
+  setReliabilityViewport(snapshot.reliabilityViewport || defaultReliabilityViewport, false);
   updateCustomBddOrderVisibility();
   syncTextFromGraph();
   renderAll();
@@ -834,6 +1310,8 @@ function createNewProject() {
   nodeSequence = 0;
   textArea.value = emptyTextModel;
   setProjectName("Untitled Fault Tree");
+  setReliabilityMissionTimeHours(8760, false);
+  setReliabilityViewport(defaultReliabilityViewport, false);
   setTool("basic");
   setBuilderMode("graphical");
   renderAll();
@@ -1054,6 +1532,29 @@ function openShortcutsModal() {
 function closeShortcutsModal() {
   shortcutsModal.hidden = true;
   showShortcutsButton.focus();
+}
+
+async function openReliabilityModal() {
+  reliabilityModal.hidden = false;
+  updateReliabilityView();
+  closeReliabilityButton.focus();
+
+  if (getTopEventProbabilityForReliability() !== null) {
+    return;
+  }
+
+  showReliabilityGraphButton.disabled = true;
+  statusLine.textContent = "Preparing reliability graph...";
+  try {
+    await runAnalysis();
+  } finally {
+    showReliabilityGraphButton.disabled = false;
+  }
+}
+
+function closeReliabilityModal() {
+  reliabilityModal.hidden = true;
+  showReliabilityGraphButton.focus();
 }
 
 function openExportModal() {
@@ -2221,6 +2722,7 @@ async function exportBddPng(filenameBase = safeFilename(projectName)) {
 
 function modelToProjectJson() {
   syncCustomBddOrder();
+  const reliabilityViewport = getReliabilityViewport();
   return {
     schemaVersion: "0.1.0",
     project: {
@@ -2233,6 +2735,12 @@ function modelToProjectJson() {
       quantification: "rare-event-approximation",
       variableOrdering: bddOrderingSelect.value,
       customVariableOrder: parseCustomBddOrder(),
+      missionTimeHours: getReliabilityMissionTimeHours(),
+      timeUnit: "hours",
+      reliabilityXAxisMinHours: reliabilityViewport.xMinHours,
+      reliabilityXAxisMaxHours: reliabilityViewport.xMaxHours,
+      reliabilityYAxisMin: reliabilityViewport.yMin,
+      reliabilityYAxisMax: reliabilityViewport.yMax,
     },
     nodes: Object.values(model.nodes).map((node) => {
       const type = node.kind === "intermediate_event" ? "intermediate_event" : node.kind;
@@ -2309,6 +2817,8 @@ function loadModelFromSbe(content, filename) {
   selectedNodeId = model.rootId;
   updateNodeSequence();
   setProjectName(filename ? filename.replace(/\.sbe$/i, "") : "Imported XFTA SBE");
+  setReliabilityMissionTimeHours(8760, false);
+  setReliabilityViewport(defaultReliabilityViewport, false);
   syncTextFromGraph();
   setBuilderMode("graphical");
   renderAll();
@@ -2487,6 +2997,16 @@ function loadProjectFromJson(project) {
   selectedNodeId = model.rootId;
   updateNodeSequence();
   setProjectName(projectName);
+  setReliabilityMissionTimeHours(project.analysis?.missionTimeHours ?? project.analysis?.missionTime ?? 8760, false);
+  setReliabilityViewport(
+    {
+      xMinHours: project.analysis?.reliabilityXAxisMinHours ?? defaultReliabilityViewport.xMinHours,
+      xMaxHours: project.analysis?.reliabilityXAxisMaxHours ?? project.analysis?.missionTimeHours ?? project.analysis?.missionTime ?? 8760,
+      yMin: project.analysis?.reliabilityYAxisMin ?? defaultReliabilityViewport.yMin,
+      yMax: project.analysis?.reliabilityYAxisMax ?? defaultReliabilityViewport.yMax,
+    },
+    false
+  );
   bddOrderingSelect.value = ["alphabetical", "infix", "custom"].includes(project.analysis?.variableOrdering)
     ? project.analysis.variableOrdering
     : "infix";
@@ -2612,17 +3132,25 @@ function clearAnalysisResults(message) {
   lastAnalysisSnapshot = null;
   lastBddGraph = null;
   lastBddAnalysis = null;
+  lastReliabilityState = null;
   qualitativeTableBody.innerHTML = `
     <tr>
       <td colspan="3">${escapeHtml(message)}</td>
     </tr>
   `;
-  metricMissionTime.textContent = "Rare-event approximation";
+  metricMissionTime.textContent = `${formatNumber(getReliabilityMissionTimeHours())} h`;
   metricTopProbability.textContent = "pending";
+  metricReliabilityLambda.textContent = "pending";
+  metricReliabilityAtMission.textContent = "pending";
   metricVariableCount.textContent = String(getLeafEventNodes().length);
   metricBddOrdering.textContent = bddOrderingSelect.value;
   metricBddNodes.textContent = "pending";
   metricBddVariableOrder.textContent = "pending";
+  if (reliabilitySourceNote) {
+    reliabilitySourceNote.textContent =
+      "The reliability curve will be derived from the current top-event probability using R(t) = exp(-λt).";
+  }
+  renderReliabilityChart(null, message);
   renderBddGraph(null);
   clearAnalysisSummary();
 }
@@ -2767,23 +3295,27 @@ async function runAnalysis() {
     qualitativeTableBody.appendChild(row);
   });
 
-  const topProbability = cutSets.reduce((total, cutSet) => {
+  const approximateTopProbability = cutSets.reduce((total, cutSet) => {
     return total + (cutSet.events || []).reduce((product, label) => product * probabilityForLabel(label), 1);
   }, 0);
+  const exactTopProbability = Number(bddAnalysis?.bdd?.exactProbability);
+  const topProbability = Number.isFinite(exactTopProbability) ? exactTopProbability : approximateTopProbability;
 
   lastAnalysisSnapshot = {
     cutSets,
     topProbability: Math.min(topProbability, 1),
+    approximateTopProbability: Math.min(approximateTopProbability, 1),
     analysisDuration,
     generatedAt: new Date().toISOString(),
     engine: "Python backend",
   };
 
-  metricMissionTime.textContent = "Rare-event approximation";
+  metricMissionTime.textContent = `${formatNumber(getReliabilityMissionTimeHours())} h`;
   metricTopProbability.textContent = formatNumber(Math.min(topProbability, 1));
   metricVariableCount.textContent = String(getLeafEventNodes().length);
   renderBddResults(bddAnalysis?.bdd);
   renderAnalysisSummary(cutSets, topProbability, analysisDuration, bddAnalysis?.bdd);
+  updateReliabilityView();
   if (bddAnalysis?.bdd && !bddAnalysis.bdd.graph) {
     statusLine.textContent = `Backend analysis refreshed: ${backendResult.count ?? cutSets.length} minimal cut sets. BDD graph data was not returned; restart the Python backend and run analysis again.`;
     return;
@@ -3465,6 +3997,13 @@ document.querySelector("#new-project").addEventListener("click", createNewProjec
 document.querySelector("#rename-project").addEventListener("click", renameProject);
 document.querySelector("#import-project").addEventListener("click", () => importProjectInput.click());
 document.querySelector("#export-project").addEventListener("click", exportProject);
+showReliabilityGraphButton.addEventListener("click", openReliabilityModal);
+closeReliabilityButton.addEventListener("click", closeReliabilityModal);
+reliabilityModal.addEventListener("click", (event) => {
+  if (event.target === reliabilityModal) {
+    closeReliabilityModal();
+  }
+});
 showShortcutsButton.addEventListener("click", openShortcutsModal);
 closeShortcutsButton.addEventListener("click", closeShortcutsModal);
 shortcutsModal.addEventListener("click", (event) => {
@@ -3500,6 +4039,16 @@ document.querySelector("#reset-text-model").addEventListener("click", () => {
   statusLine.textContent = "Boolean expression cleared.";
 });
 document.querySelector("#run-analysis").addEventListener("click", runAnalysis);
+reliabilityMissionTimeInput?.addEventListener("input", () => {
+  if (metricMissionTime) {
+    metricMissionTime.textContent = `${formatNumber(getReliabilityMissionTimeHours())} h`;
+  }
+  updateReliabilityView();
+});
+reliabilityMissionTimeInput?.addEventListener("change", () => {
+  setReliabilityMissionTimeHours(getReliabilityMissionTimeHours(), false);
+  updateReliabilityView();
+});
 toggleBddWorkspaceButton.addEventListener("click", toggleBddWorkspaceView);
 bddOrderingSelect.addEventListener("change", () => {
   if (bddOrderingSelect.value === "custom") {

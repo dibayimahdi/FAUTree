@@ -278,13 +278,24 @@
         <div class="result-panel" data-result-panel="quantitative">
           <div class="metric-grid">
             <article>
-              <span>Quantification</span>
-              <strong id="metric-mission-time">Rare-event approximation</strong>
+              <span>Mission time</span>
+              <strong id="metric-mission-time">8760 h</strong>
             </article>
             <article>
               <span>Top event probability</span>
               <strong id="metric-top-probability">pending</strong>
             </article>
+            <article>
+              <span>Estimated failure rate λ</span>
+              <strong id="metric-reliability-lambda">pending</strong>
+            </article>
+            <article>
+              <span>Reliability at T</span>
+              <strong id="metric-reliability-at-mission">pending</strong>
+            </article>
+          </div>
+          <div class="reliability-action-panel">
+            <button class="primary-button reliability-open-button" id="show-reliability-graph">Show Reliability Graph</button>
           </div>
         </div>
 
@@ -313,6 +324,28 @@
               <button class="primary-button bdd-toggle-button" id="toggle-bdd-workspace">Generate BDD</button>
             </div>
           </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop reliability-modal-backdrop" id="reliability-modal" hidden>
+      <section class="modal-panel reliability-modal-panel" role="dialog" aria-modal="true" aria-labelledby="reliability-title">
+        <div class="modal-header reliability-modal-header">
+          <div>
+            <h2 id="reliability-title">Reliability Graph</h2>
+            <p id="reliability-source-note">The reliability curve will be derived from the current top-event probability using <code>R(t) = exp(-λt)</code>.</p>
+          </div>
+          <div class="reliability-modal-actions">
+            <button class="icon-button" id="close-reliability" title="Close reliability graph" aria-label="Close reliability graph">x</button>
+          </div>
+        </div>
+        <div class="reliability-modal-body">
+          <input id="reliability-mission-time" type="hidden" value="8760">
+          <input id="reliability-x-min" type="hidden" value="0">
+          <input id="reliability-x-max" type="hidden" value="8760">
+          <input id="reliability-y-min" type="hidden" value="-0.1">
+          <input id="reliability-y-max" type="hidden" value="1.2">
+          <svg id="reliability-chart" class="reliability-chart" viewBox="0 0 960 520" role="img" aria-label="Reliability curve R(t)"></svg>
         </div>
       </section>
     </div>

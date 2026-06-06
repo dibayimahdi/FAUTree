@@ -53,11 +53,23 @@ class AnalysisSettings:
     quantification: str = "rare-event-approximation"
     variable_ordering: str = "infix"
     custom_variable_order: tuple[str, ...] = ()
+    mission_time_hours: float = 8760.0
+    time_unit: str = "hours"
+    reliability_x_min_hours: float = 0.0
+    reliability_x_max_hours: float = 8760.0
+    reliability_y_min: float = 0.0
+    reliability_y_max: float = 1.05
 
     def to_dict(self) -> dict:
         payload = {
             "quantification": self.quantification,
             "variableOrdering": self.variable_ordering,
+            "missionTimeHours": self.mission_time_hours,
+            "timeUnit": self.time_unit,
+            "reliabilityXAxisMinHours": self.reliability_x_min_hours,
+            "reliabilityXAxisMaxHours": self.reliability_x_max_hours,
+            "reliabilityYAxisMin": self.reliability_y_min,
+            "reliabilityYAxisMax": self.reliability_y_max,
         }
         if self.custom_variable_order:
             payload["customVariableOrder"] = list(self.custom_variable_order)
@@ -113,6 +125,17 @@ class FaultTreeProject:
                 quantification=analysis_payload.get("quantification", "rare-event-approximation"),
                 variable_ordering="infix" if analysis_payload.get("variableOrdering", "infix") == "topological" else analysis_payload.get("variableOrdering", "infix"),
                 custom_variable_order=tuple(analysis_payload.get("customVariableOrder", [])),
+                mission_time_hours=float(analysis_payload.get("missionTimeHours", analysis_payload.get("missionTime", 8760.0))),
+                time_unit=analysis_payload.get("timeUnit", "hours"),
+                reliability_x_min_hours=float(analysis_payload.get("reliabilityXAxisMinHours", 0.0)),
+                reliability_x_max_hours=float(
+                    analysis_payload.get(
+                        "reliabilityXAxisMaxHours",
+                        analysis_payload.get("missionTimeHours", analysis_payload.get("missionTime", 8760.0)),
+                    )
+                ),
+                reliability_y_min=float(analysis_payload.get("reliabilityYAxisMin", 0.0)),
+                reliability_y_max=float(analysis_payload.get("reliabilityYAxisMax", 1.05)),
             ),
             nodes=[
                 cls._node_from_dict(node)
@@ -168,6 +191,15 @@ class FaultTreeProject:
                 errors.append(
                     f'Repeated basic event "{label}" has inconsistent probabilities.'
                 )
+
+        if self.analysis.mission_time_hours <= 0:
+            errors.append("Mission time must be greater than zero.")
+        if self.analysis.reliability_x_min_hours < 0:
+            errors.append("Reliability chart t-axis minimum must be zero or greater.")
+        if self.analysis.reliability_x_max_hours <= self.analysis.reliability_x_min_hours:
+            errors.append("Reliability chart t-axis maximum must be greater than its minimum.")
+        if self.analysis.reliability_y_max <= self.analysis.reliability_y_min:
+            errors.append("Reliability chart y-axis maximum must be greater than its minimum.")
 
         return errors
 
