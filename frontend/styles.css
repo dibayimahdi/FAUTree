@@ -1085,9 +1085,23 @@ th {
   padding: 18px;
 }
 
-.reliability-modal-panel {
+.reliability-modal-backdrop.is-maximized {
+  padding: 0;
+}
+
+.modal-panel.reliability-modal-panel {
   width: min(1120px, 100%);
   max-height: min(860px, 94vh);
+}
+
+.modal-panel.reliability-modal-panel.is-maximized {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .reliability-modal-header {
@@ -1101,14 +1115,56 @@ th {
 .reliability-modal-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   flex: 0 0 auto;
+}
+
+.reliability-save-group {
+  display: inline-grid;
+  grid-template-columns: auto minmax(76px, 92px);
+  align-items: stretch;
+}
+
+.reliability-save-button {
+  min-width: 88px;
+  padding: 0 10px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.reliability-save-group select {
+  height: 38px;
+  min-width: 76px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.reliability-maximize-button {
+  min-width: 96px;
+  padding: 0 12px;
 }
 
 .reliability-modal-body {
   display: grid;
   gap: 14px;
   padding: 16px 18px 18px;
+}
+
+.reliability-modal-panel.is-maximized .reliability-modal-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.reliability-modal-panel.is-maximized .reliability-chart {
+  height: 100%;
+  min-height: 0;
 }
 
 .bdd-action-panel {

@@ -75,6 +75,9 @@ const toggleBddWorkspaceButton = document.querySelector("#toggle-bdd-workspace")
 const reliabilityModal = document.querySelector("#reliability-modal");
 const showReliabilityGraphButton = document.querySelector("#show-reliability-graph");
 const closeReliabilityButton = document.querySelector("#close-reliability");
+const toggleReliabilityMaximizeButton = document.querySelector("#toggle-reliability-maximize");
+const saveReliabilityGraphButton = document.querySelector("#save-reliability-graph");
+const reliabilityExportFormatSelect = document.querySelector("#reliability-export-format");
 const shortcutsModal = document.querySelector("#shortcuts-modal");
 const showShortcutsButton = document.querySelector("#show-shortcuts");
 const closeShortcutsButton = document.querySelector("#close-shortcuts");
@@ -285,12 +288,8 @@ function updateReliabilityView() {
     metricReliabilityAtMission.textContent = formatNumber(state.reliabilityAtMission);
   }
   if (reliabilitySourceNote) {
-    const sourceLabel = Number.isFinite(Number(lastBddAnalysis?.exactProbability))
-      ? "BDD exact probability"
-      : "rare-event cut-set approximation";
     reliabilitySourceNote.textContent =
-      `The reliability curve is anchored to the current top-event failure probability from the ${sourceLabel}. ` +
-      `It uses R(t) = exp(-λt) with λ = ${formatNumber(state.lambda)} for t >= 0.`;
+      "The reliability curve is anchored to the current top-event failure probability using R(t) = exp(-λt).";
   }
   renderReliabilityChart(state);
 }
@@ -410,13 +409,17 @@ function renderReliabilityChart(state, emptyMessage = "Run analysis to draw the 
   const linePoints = state.points.map((point) => `${xScale(point.t)},${yScale(point.reliability)}`).join(" ");
   const baseValue = yMin <= 0 && yMax >= 0 ? 0 : yMin;
   const baselineY = yScale(baseValue);
+  const originX = xScale(0);
+  const originY = yScale(1);
   const horizonX = xScale(state.missionTimeHours);
   const horizonY = yScale(state.reliabilityAtMission);
+  const originPointVisible = xMinHours <= 0 && xMaxHours >= 0 && yMin <= 1 && yMax >= 1;
   const missionPointVisible =
     state.missionTimeHours >= xMinHours &&
     state.missionTimeHours <= xMaxHours &&
     state.reliabilityAtMission >= yMin &&
     state.reliabilityAtMission <= yMax;
+  const missionPointSeparatedFromOrigin = Math.abs(horizonX - originX) >= 120;
 
   const title = createSvgNode("text");
   title.setAttribute("x", String(margin.left));
@@ -424,14 +427,6 @@ function renderReliabilityChart(state, emptyMessage = "Run analysis to draw the 
   title.setAttribute("class", "chart-title");
   title.textContent = "System reliability curve";
   reliabilityChart.appendChild(title);
-
-  const subtitle = createSvgNode("text");
-  subtitle.setAttribute("x", String(width - margin.right));
-  subtitle.setAttribute("y", "18");
-  subtitle.setAttribute("text-anchor", "end");
-  subtitle.setAttribute("class", "chart-label");
-  subtitle.textContent = `λ = ${formatNumber(state.lambda)}, R(T) = ${formatNumber(state.reliabilityAtMission)}`;
-  reliabilityChart.appendChild(subtitle);
 
   [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
     const value = yMin + tick * yRange;
@@ -544,7 +539,24 @@ function renderReliabilityChart(state, emptyMessage = "Run analysis to draw the 
   clippedLayer.appendChild(path);
   reliabilityChart.appendChild(clippedLayer);
 
-  if (missionPointVisible) {
+  if (originPointVisible) {
+    const originMarker = createSvgNode("circle");
+    originMarker.setAttribute("cx", String(originX));
+    originMarker.setAttribute("cy", String(originY));
+    originMarker.setAttribute("r", "5.5");
+    originMarker.setAttribute("class", "curve-marker");
+    reliabilityChart.appendChild(originMarker);
+
+    const originLabel = createSvgNode("text");
+    originLabel.setAttribute("x", String(originX + 10));
+    originLabel.setAttribute("y", String(Math.max(margin.top + 12, originY - 10)));
+    originLabel.setAttribute("text-anchor", "start");
+    originLabel.setAttribute("class", "chart-tick");
+    originLabel.textContent = `R(0) = ${formatNumber(1)}`;
+    reliabilityChart.appendChild(originLabel);
+  }
+
+  if (missionPointVisible && missionPointSeparatedFromOrigin) {
     const marker = createSvgNode("circle");
     marker.setAttribute("cx", String(horizonX));
     marker.setAttribute("cy", String(horizonY));
@@ -1534,6 +1546,21 @@ function closeShortcutsModal() {
   showShortcutsButton.focus();
 }
 
+function setReliabilityModalMaximized(maximized) {
+  reliabilityModal?.classList.toggle("is-maximized", maximized);
+  reliabilityModal?.querySelector(".reliability-modal-panel")?.classList.toggle("is-maximized", maximized);
+  if (toggleReliabilityMaximizeButton) {
+    toggleReliabilityMaximizeButton.textContent = maximized ? "Restore" : "Maximize";
+    toggleReliabilityMaximizeButton.title = maximized ? "Restore reliability graph size" : "Maximize reliability graph";
+    toggleReliabilityMaximizeButton.setAttribute("aria-pressed", String(maximized));
+  }
+  requestAnimationFrame(updateReliabilityView);
+}
+
+function toggleReliabilityModalMaximize() {
+  setReliabilityModalMaximized(!reliabilityModal?.classList.contains("is-maximized"));
+}
+
 async function openReliabilityModal() {
   reliabilityModal.hidden = false;
   updateReliabilityView();
@@ -1553,6 +1580,7 @@ async function openReliabilityModal() {
 }
 
 function closeReliabilityModal() {
+  setReliabilityModalMaximized(false);
   reliabilityModal.hidden = true;
   showReliabilityGraphButton.focus();
 }
@@ -1626,6 +1654,16 @@ function handleKeyboardShortcut(event) {
   if (key === "escape" && !exportModal.hidden) {
     event.preventDefault();
     closeExportModal();
+    return;
+  }
+
+  if (key === "escape" && reliabilityModal && !reliabilityModal.hidden) {
+    event.preventDefault();
+    if (reliabilityModal.classList.contains("is-maximized")) {
+      setReliabilityModalMaximized(false);
+    } else {
+      closeReliabilityModal();
+    }
     return;
   }
 
@@ -2422,6 +2460,48 @@ function buildBddExportSvg() {
   };
 }
 
+function buildReliabilityExportSvg() {
+  updateReliabilityView();
+  if (!lastReliabilityState || !reliabilityChart) {
+    throw new Error("Run analysis before saving the reliability graph.");
+  }
+
+  const svg = reliabilityChart.cloneNode(true);
+  const viewBoxParts = (svg.getAttribute("viewBox") || "0 0 960 520").split(/\s+/).map(Number);
+  const width = Number.isFinite(viewBoxParts[2]) ? viewBoxParts[2] : 960;
+  const height = Number.isFinite(viewBoxParts[3]) ? viewBoxParts[3] : 520;
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${projectName} reliability graph`);
+
+  const style = createSvgNode("style");
+  style.textContent = `
+    text { fill: #24272b; font-family: "Segoe UI", Arial, sans-serif; }
+    .reliability-export-bg { fill: #fffdf9; }
+    .axis-line { stroke: rgba(49, 95, 125, 0.42); stroke-width: 1.4; }
+    .grid-line { stroke: rgba(49, 95, 125, 0.12); stroke-width: 1; }
+    .curve-line { fill: none; stroke: #126b64; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+    .curve-fill { fill: rgba(18, 107, 100, 0.12); }
+    .curve-marker { fill: #126b64; stroke: #fff; stroke-width: 2; }
+    .chart-title { fill: #24272b; font-size: 14px; font-weight: 800; }
+    .chart-label { fill: #68706d; font-size: 11px; font-weight: 700; }
+    .chart-tick { fill: #68706d; font-size: 11px; }
+  `;
+  svg.insertBefore(style, svg.firstChild);
+
+  const background = createSvgNode("rect");
+  background.setAttribute("class", "reliability-export-bg");
+  background.setAttribute("x", "0");
+  background.setAttribute("y", "0");
+  background.setAttribute("width", String(width));
+  background.setAttribute("height", String(height));
+  svg.insertBefore(background, style.nextSibling);
+
+  return { svg, width, height, state: lastReliabilityState };
+}
+
 async function svgToPngBlob(svgMarkup, width, height) {
   return new Promise((resolve, reject) => {
     const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
@@ -2455,6 +2535,117 @@ async function svgToPngBlob(svgMarkup, width, height) {
     };
     image.src = url;
   });
+}
+
+async function svgToJpegData(svgMarkup, width, height, scale = 2) {
+  return new Promise((resolve, reject) => {
+    const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        URL.revokeObjectURL(url);
+        reject(new Error("PDF export is not available in this browser."));
+        return;
+      }
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(async (blob) => {
+        URL.revokeObjectURL(url);
+        if (!blob) {
+          reject(new Error("PDF export failed."));
+          return;
+        }
+        resolve({
+          bytes: new Uint8Array(await blob.arrayBuffer()),
+          width: canvas.width,
+          height: canvas.height,
+        });
+      }, "image/jpeg", 0.94);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not render SVG for PDF export."));
+    };
+    image.src = url;
+  });
+}
+
+function formatPdfNumber(value) {
+  return Number(value.toFixed(3)).toString();
+}
+
+function buildPdfBlobFromJpeg(jpegBytes, imageWidth, imageHeight) {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const offsets = [0];
+  let byteLength = 0;
+  const pageWidth = 841.89;
+  const pageHeight = 595.28;
+  const margin = 36;
+  const maxImageWidth = pageWidth - margin * 2;
+  const maxImageHeight = pageHeight - margin * 2;
+  const imageRatio = imageWidth / imageHeight;
+  const pageRatio = maxImageWidth / maxImageHeight;
+  const drawWidth = imageRatio > pageRatio ? maxImageWidth : maxImageHeight * imageRatio;
+  const drawHeight = imageRatio > pageRatio ? maxImageWidth / imageRatio : maxImageHeight;
+  const drawX = (pageWidth - drawWidth) / 2;
+  const drawY = (pageHeight - drawHeight) / 2;
+  const content = [
+    "q",
+    `${formatPdfNumber(drawWidth)} 0 0 ${formatPdfNumber(drawHeight)} ${formatPdfNumber(drawX)} ${formatPdfNumber(drawY)} cm`,
+    "/Im0 Do",
+    "Q",
+    "",
+  ].join("\n");
+  const contentBytes = encoder.encode(content);
+
+  function append(chunk) {
+    const bytes = typeof chunk === "string" ? encoder.encode(chunk) : chunk;
+    chunks.push(bytes);
+    byteLength += bytes.length;
+  }
+
+  function appendObject(objectNumber, objectChunks) {
+    offsets[objectNumber] = byteLength;
+    append(`${objectNumber} 0 obj\n`);
+    objectChunks.forEach(append);
+    append("\nendobj\n");
+  }
+
+  append("%PDF-1.4\n");
+  appendObject(1, ["<< /Type /Catalog /Pages 2 0 R >>"]);
+  appendObject(2, ["<< /Type /Pages /Kids [3 0 R] /Count 1 >>"]);
+  appendObject(3, [
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${formatPdfNumber(pageWidth)} ${formatPdfNumber(pageHeight)}] `,
+    "/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>",
+  ]);
+  appendObject(4, [
+    `<< /Type /XObject /Subtype /Image /Width ${imageWidth} /Height ${imageHeight} `,
+    `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`,
+    jpegBytes,
+    "\nendstream",
+  ]);
+  appendObject(5, [
+    `<< /Length ${contentBytes.length} >>\nstream\n`,
+    contentBytes,
+    "endstream",
+  ]);
+
+  const xrefOffset = byteLength;
+  append("xref\n0 6\n0000000000 65535 f \n");
+  for (let index = 1; index <= 5; index += 1) {
+    append(`${String(offsets[index]).padStart(10, "0")} 00000 n \n`);
+  }
+  append("trailer\n<< /Size 6 /Root 1 0 R >>\n");
+  append(`startxref\n${xrefOffset}\n%%EOF\n`);
+
+  return new Blob(chunks, { type: "application/pdf" });
 }
 
 function createAnalysisSnapshotForExport() {
@@ -2676,6 +2867,52 @@ async function exportDiagramPng(target, filenameBase = safeFilename(projectName)
     return;
   }
   await exportFaultTreePng(filenameBase);
+}
+
+async function exportReliabilitySvg(filenameBase = safeFilename(projectName)) {
+  try {
+    const asset = buildReliabilityExportSvg();
+    downloadTextFile(`${filenameBase}-reliability.svg`, serializeSvg(asset.svg), "image/svg+xml;charset=utf-8");
+    statusLine.textContent = "Reliability graph exported as SVG.";
+  } catch (error) {
+    statusLine.textContent = error.message;
+  }
+}
+
+async function exportReliabilityPng(filenameBase = safeFilename(projectName)) {
+  try {
+    const asset = buildReliabilityExportSvg();
+    const blob = await svgToPngBlob(serializeSvg(asset.svg), asset.width, asset.height);
+    downloadBlob(`${filenameBase}-reliability.png`, blob);
+    statusLine.textContent = "Reliability graph exported as PNG.";
+  } catch (error) {
+    statusLine.textContent = error.message;
+  }
+}
+
+async function exportReliabilityPdf(filenameBase = safeFilename(projectName)) {
+  try {
+    const asset = buildReliabilityExportSvg();
+    const jpeg = await svgToJpegData(serializeSvg(asset.svg), asset.width, asset.height);
+    const blob = buildPdfBlobFromJpeg(jpeg.bytes, jpeg.width, jpeg.height);
+    downloadBlob(`${filenameBase}-reliability.pdf`, blob);
+    statusLine.textContent = "Reliability graph exported as PDF.";
+  } catch (error) {
+    statusLine.textContent = error.message;
+  }
+}
+
+async function exportReliabilityGraph(filenameBase = safeFilename(projectName)) {
+  const format = reliabilityExportFormatSelect?.value || "svg";
+  if (format === "png") {
+    await exportReliabilityPng(filenameBase);
+    return;
+  }
+  if (format === "pdf") {
+    await exportReliabilityPdf(filenameBase);
+    return;
+  }
+  await exportReliabilitySvg(filenameBase);
 }
 
 async function exportFaultTreeSvg(filenameBase = safeFilename(projectName)) {
@@ -3999,6 +4236,8 @@ document.querySelector("#import-project").addEventListener("click", () => import
 document.querySelector("#export-project").addEventListener("click", exportProject);
 showReliabilityGraphButton.addEventListener("click", openReliabilityModal);
 closeReliabilityButton.addEventListener("click", closeReliabilityModal);
+toggleReliabilityMaximizeButton?.addEventListener("click", toggleReliabilityModalMaximize);
+saveReliabilityGraphButton?.addEventListener("click", () => exportReliabilityGraph());
 reliabilityModal.addEventListener("click", (event) => {
   if (event.target === reliabilityModal) {
     closeReliabilityModal();

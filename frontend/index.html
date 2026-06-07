@@ -336,6 +336,15 @@
             <p id="reliability-source-note">The reliability curve will be derived from the current top-event probability using <code>R(t) = exp(-λt)</code>.</p>
           </div>
           <div class="reliability-modal-actions">
+            <div class="reliability-save-group">
+              <button class="quiet-button reliability-save-button" id="save-reliability-graph" title="Save reliability graph in the selected format">Save as</button>
+              <select id="reliability-export-format" aria-label="Reliability graph export format">
+                <option value="svg">SVG</option>
+                <option value="png">PNG</option>
+                <option value="pdf">PDF</option>
+              </select>
+            </div>
+            <button class="quiet-button reliability-maximize-button" id="toggle-reliability-maximize" title="Maximize reliability graph" aria-pressed="false">Maximize</button>
             <button class="icon-button" id="close-reliability" title="Close reliability graph" aria-label="Close reliability graph">x</button>
           </div>
         </div>
