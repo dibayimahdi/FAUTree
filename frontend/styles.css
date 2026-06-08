@@ -463,6 +463,17 @@ button {
   border-color: #b42318;
 }
 
+.fault-node.is-repeated-basic-event {
+  border-color: #b7791f;
+  box-shadow: 0 14px 28px rgba(183, 121, 31, 0.18);
+}
+
+.fault-node.is-repeated-basic-event.is-selected,
+.fault-node.is-repeated-basic-event:hover {
+  border-color: #9a5f06;
+  box-shadow: 0 16px 30px rgba(154, 95, 6, 0.22);
+}
+
 .event-node {
   width: 188px;
   min-height: 74px;
@@ -917,6 +928,41 @@ button {
   font-size: 15px;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.repeated-events-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+}
+
+.repeated-events-row strong {
+  margin-top: 0;
+  flex: 1 1 auto;
+}
+
+.qualitative-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  height: 32px;
+  padding: 0 14px;
+  background: rgba(18, 107, 100, 0.08);
+  color: var(--teal);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(18, 107, 100, 0.18);
+  box-shadow: none;
+}
+
+.qualitative-toggle-button:hover,
+.qualitative-toggle-button:focus-visible {
+  background: rgba(18, 107, 100, 0.12);
+  color: var(--teal);
 }
 
 table {

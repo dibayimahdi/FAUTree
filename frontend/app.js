@@ -26,6 +26,7 @@ let lastAnalysisSnapshot = null;
 let lastReliabilityState = null;
 let resultsPaneResizeState = null;
 let customBddOrder = [];
+let repeatedBasicEventDisplayMode = "off";
 
 const appShell = document.querySelector(".app-shell");
 const graphLayer = document.querySelector("#graph-layer");
@@ -98,6 +99,7 @@ const summaryAnalysisTime = document.querySelector("#summary-analysis-time");
 const summaryBasicEvents = document.querySelector("#summary-basic-events");
 const summaryRepeatedEvents = document.querySelector("#summary-repeated-events");
 const summaryAnalysisEngine = document.querySelector("#summary-analysis-engine");
+const toggleRepeatedEventsViewButton = document.querySelector("#toggle-repeated-events-view");
 const resultsResizeHandle = document.querySelector("#results-resize-handle");
 
 textArea.value = emptyTextModel;
@@ -1054,6 +1056,7 @@ function createLinePath(parent, child) {
 
 function renderCanvas() {
   const positions = layoutTree();
+  const repeatedBasicEventCounts = getRepeatedBasicEventCounts();
   graphLayer.innerHTML = "";
   faultLines.innerHTML = "";
 
@@ -1075,6 +1078,10 @@ function renderCanvas() {
     button.title = nodeKindLabel(node);
     button.classList.toggle("is-selected", node.id === selectedNodeId);
     button.classList.toggle("is-invalid", invalidNodeIds.has(node.id));
+
+    const repeatedCount = node.kind === "basic_event" ? repeatedBasicEventCounts.get(node.label.trim()) || 0 : 0;
+    const repeated = repeatedCount > 1;
+    button.classList.toggle("is-repeated-basic-event", repeated && repeatedBasicEventDisplayMode === "highlight");
 
     if (node.kind === "gate") {
       button.innerHTML = createGateSymbol(node.gate, node.votingThreshold, node.children.length);
@@ -2323,6 +2330,7 @@ function addSvgMultilineText(target, lines, x, y, className, lineHeight = 16) {
 
 function buildFaultTreeExportSvg() {
   const layout = measureTreeLayout();
+  const repeatedBasicEventCounts = getRepeatedBasicEventCounts();
   const svg = createSvgNode("svg");
   svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   svg.setAttribute("width", layout.stageWidth);
@@ -2339,6 +2347,7 @@ function buildFaultTreeExportSvg() {
     .event-card.top-event { fill: #fff0eb; stroke: #b42318; }
     .event-card.intermediate-event { fill: #fff7ed; stroke: #ea580c; }
     .event-card.undeveloped-event { fill: #f5f3ff; stroke: #7c3aed; }
+    .event-card.is-repeated-basic-event { stroke: #b7791f; }
     .event-kind { fill: #8a5a14; font: 600 11px "Segoe UI", Arial, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
     .event-label { fill: #1f2937; font: 700 15px "Segoe UI", Arial, sans-serif; }
     .event-rate { fill: #475467; font: 500 11px "Segoe UI", Arial, sans-serif; }
@@ -2401,7 +2410,9 @@ function buildFaultTreeExportSvg() {
     card.setAttribute("height", position.height);
     card.setAttribute("rx", node.kind === "undeveloped_event" ? "24" : "18");
     card.setAttribute("ry", node.kind === "undeveloped_event" ? "24" : "18");
-    card.setAttribute("class", `event-card ${node.kind.replace(/_/g, "-")}`);
+    const repeatedCount = node.kind === "basic_event" ? repeatedBasicEventCounts.get(node.label.trim()) || 0 : 0;
+    const repeated = repeatedCount > 1;
+    card.setAttribute("class", `event-card ${node.kind.replace(/_/g, "-")}${repeated && repeatedBasicEventDisplayMode === "highlight" ? " is-repeated-basic-event" : ""}`);
     svg.append(card);
 
     addSvgMultilineText(svg, [nodeKindLabel(node)], position.centerX, position.y + 18, "event-kind", 14);
@@ -2729,7 +2740,7 @@ function buildFaultTreePdfReportHtml() {
             <div class="meta-card"><strong>Minimal Cut Sets</strong><span>${(analysis.cutSets || []).length}</span></div>
             <div class="meta-card"><strong>Top Probability</strong><span>${formatNumber(analysis.topProbability || 0)}</span></div>
             <div class="meta-card"><strong>Minimum Order</strong><span>${(analysis.cutSets || []).length ? Math.min(...analysis.cutSets.map((cutSet) => cutSet.order)) : "none"}</span></div>
-            <div class="meta-card"><strong>Repeated Events</strong><span>${repeatedEvents.length}</span></div>
+            <div class="meta-card"><strong>Repeated Events</strong><span>${repeatedEvents.length ? `${repeatedEvents.length} (${repeatedEvents.map(escapeHtml).join(", ")})` : "0"}</span></div>
             <div class="meta-card"><strong>Dominant Cut Set</strong><span>${dominant ? `{ ${escapeHtml(dominant.events.join(", "))} }` : "none"}</span></div>
           </section>
           <section class="section">
@@ -3571,7 +3582,7 @@ function clearAnalysisSummary() {
   summaryDominantCutSet.textContent = "pending";
   summaryAnalysisTime.textContent = "pending";
   summaryBasicEvents.textContent = String(getLeafEventNodes().length);
-  summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
+  summaryRepeatedEvents.textContent = formatRepeatedBasicEventSummary();
   summaryAnalysisEngine.textContent = "Python backend";
 }
 
@@ -3999,7 +4010,7 @@ function renderAnalysisSummary(cutSets, topProbability, analysisDuration, bdd) {
   summaryDominantCutSet.textContent = dominant ? `{ ${dominant.events.join(", ")} }` : "none";
   summaryAnalysisTime.textContent = `${Math.max(1, Math.round(analysisDuration))} ms`;
   summaryBasicEvents.textContent = String(getLeafEventNodes().length);
-  summaryRepeatedEvents.textContent = String(getRepeatedBasicEventLabels().length);
+  summaryRepeatedEvents.textContent = formatRepeatedBasicEventSummary();
   summaryAnalysisEngine.textContent = "Python backend";
 }
 
@@ -4041,12 +4052,53 @@ function updateCustomBddOrderVisibility() {
   }
 }
 
-function getRepeatedBasicEventLabels() {
+function getRepeatedBasicEventCounts() {
   const counts = new Map();
-  getLeafEventNodes().forEach((node) => {
-    counts.set(node.label, (counts.get(node.label) || 0) + 1);
+  getBasicEventNodes().forEach((node) => {
+    const key = node.label.trim();
+    counts.set(key, (counts.get(key) || 0) + 1);
   });
-  return [...counts.entries()].filter(([, count]) => count > 1).map(([label]) => label);
+  return new Map([...counts.entries()].filter(([, count]) => count > 1));
+}
+
+function getRepeatedBasicEventLabels() {
+  return [...getRepeatedBasicEventCounts().keys()];
+}
+
+function formatRepeatedBasicEventSummary() {
+  const repeatedLabels = getRepeatedBasicEventLabels();
+  if (repeatedLabels.length === 0) {
+    return "0";
+  }
+  return `${repeatedLabels.length} (${repeatedLabels.join(", ")})`;
+}
+
+function syncRepeatedBasicEventDisplayButton() {
+  if (!toggleRepeatedEventsViewButton) {
+    return;
+  }
+
+  const config = repeatedBasicEventDisplayMode === "highlight"
+    ? {
+        label: "Hide",
+        title: "Remove the repeated basic event border highlight from the diagram",
+        pressed: true,
+      }
+    : {
+        label: "Show",
+        title: "Highlight repeated basic events on the diagram",
+        pressed: false,
+      };
+
+  toggleRepeatedEventsViewButton.textContent = config.label;
+  toggleRepeatedEventsViewButton.title = config.title;
+  toggleRepeatedEventsViewButton.setAttribute("aria-pressed", String(config.pressed));
+}
+
+function cycleRepeatedBasicEventDisplayMode() {
+  repeatedBasicEventDisplayMode = repeatedBasicEventDisplayMode === "highlight" ? "off" : "highlight";
+  syncRepeatedBasicEventDisplayButton();
+  renderCanvas();
 }
 
 function validateModelForAnalysis() {
@@ -4111,7 +4163,7 @@ function getModelValidationIssues() {
 
 function getRepeatedEventRateIssues() {
   const eventsByLabel = new Map();
-  getLeafEventNodes().forEach((node) => {
+  getBasicEventNodes().forEach((node) => {
     const key = node.label.trim();
     if (!eventsByLabel.has(key)) {
       eventsByLabel.set(key, []);
@@ -4278,6 +4330,7 @@ document.querySelector("#reset-text-model").addEventListener("click", () => {
   statusLine.textContent = "Boolean expression cleared.";
 });
 document.querySelector("#run-analysis").addEventListener("click", runAnalysis);
+toggleRepeatedEventsViewButton?.addEventListener("click", cycleRepeatedBasicEventDisplayMode);
 reliabilityMissionTimeInput?.addEventListener("input", () => {
   if (metricMissionTime) {
     metricMissionTime.textContent = `${formatNumber(getReliabilityMissionTimeHours())} h`;
@@ -4305,6 +4358,7 @@ setProjectName(projectName);
 syncCustomBddOrder();
 updateCustomBddOrderVisibility();
 syncBddSettingsVisibility();
+syncRepeatedBasicEventDisplayButton();
 syncToolButtons();
 renderAll();
 clearAnalysisResults("Add gates and basic events to compute cut sets.");
