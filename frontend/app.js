@@ -101,8 +101,43 @@ const summaryRepeatedEvents = document.querySelector("#summary-repeated-events")
 const summaryAnalysisEngine = document.querySelector("#summary-analysis-engine");
 const toggleRepeatedEventsViewButton = document.querySelector("#toggle-repeated-events-view");
 const resultsResizeHandle = document.querySelector("#results-resize-handle");
+const fmeaTableBody = document.querySelector("#fmea-table-body");
+const addFmeaRowButton = document.querySelector("#add-fmea-row");
+const sortFmeaRowsButton = document.querySelector("#sort-fmea-rows");
 
 textArea.value = emptyTextModel;
+
+function createFmeaRow(overrides = {}) {
+  return {
+    id: overrides.id || generateFmeaRowId(),
+    itemFunction: overrides.itemFunction || "",
+    failureMode: overrides.failureMode || "",
+    effect: overrides.effect || "",
+    cause: overrides.cause || "",
+    severity: normalizeFmeaScore(overrides.severity, 1),
+    occurrence: normalizeFmeaScore(overrides.occurrence, 1),
+    detectability: normalizeFmeaScore(overrides.detectability ?? overrides.detection, 1),
+  };
+}
+
+function generateFmeaRowId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `fmea-${crypto.randomUUID()}`;
+  }
+  return `fmea-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeFmeaScore(value, fallback = 1) {
+  const parsed = Number.parseInt(String(value).trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return clamp(parsed, 1, 10);
+}
+
+function getFmeaRpn(row) {
+  return normalizeFmeaScore(row.severity) * normalizeFmeaScore(row.occurrence) * normalizeFmeaScore(row.detectability);
+}
 
 function setResultsPaneHeight(height) {
   const viewportHeight = window.innerHeight || 0;
@@ -781,6 +816,7 @@ function createSampleModel() {
 function createEmptyModel() {
   return {
     rootId: "top",
+    fmeaRows: [],
     nodes: {
       top: {
         id: "top",
@@ -1186,8 +1222,18 @@ function setBuilderMode(mode) {
   });
   document.querySelector("[data-diagram-panel='bdd']").classList.remove("is-active");
   syncBddSettingsVisibility();
-  builderTitle.textContent = mode === "textual" ? "Boolean Expression Builder" : "Graphical Fault Tree Builder";
-  statusLine.textContent = mode === "textual" ? "Boolean expression builder ready." : "Graphical builder ready";
+  builderTitle.textContent =
+    mode === "textual"
+      ? "Boolean Expression Builder"
+      : mode === "fmea"
+        ? "FMEA Worksheet"
+        : "Graphical Fault Tree Builder";
+  statusLine.textContent =
+    mode === "textual"
+      ? "Boolean expression builder ready."
+      : mode === "fmea"
+        ? "FMEA worksheet ready."
+        : "Graphical builder ready";
 }
 
 function setDiagramView(view) {
@@ -1200,8 +1246,18 @@ function setDiagramView(view) {
     document.querySelectorAll("[data-builder-panel]").forEach((panel) => {
       panel.classList.toggle("is-active", panel.dataset.builderPanel === activeBuilderMode);
     });
-    builderTitle.textContent = activeBuilderMode === "textual" ? "Boolean Expression Builder" : "Graphical Fault Tree Builder";
-    statusLine.textContent = "Fault tree view ready.";
+    builderTitle.textContent =
+      activeBuilderMode === "textual"
+        ? "Boolean Expression Builder"
+        : activeBuilderMode === "fmea"
+          ? "FMEA Worksheet"
+          : "Graphical Fault Tree Builder";
+    statusLine.textContent =
+      activeBuilderMode === "textual"
+        ? "Boolean expression builder ready."
+        : activeBuilderMode === "fmea"
+          ? "FMEA worksheet ready."
+          : "Fault tree view ready.";
     return;
   }
 
@@ -1236,6 +1292,13 @@ function openTopNav(tabName) {
     setDiagramView("fault-tree");
     setBuilderMode("textual");
     setActiveTopNav("boolean");
+    return;
+  }
+
+  if (tabName === "fmea") {
+    setDiagramView("fault-tree");
+    setBuilderMode("fmea");
+    setActiveTopNav("fmea");
   }
 }
 
@@ -1594,9 +1657,15 @@ function closeReliabilityModal() {
 
 function openExportModal() {
   exportFilenameInput.value = safeFilename(projectName);
-  exportTargetSelect.value = "fault-tree";
-  exportFormatSelect.value = "pdf";
+  exportTargetSelect.value = activeBuilderMode === "fmea" ? "fmea" : "fault-tree";
   updateExportFormatOptions();
+  if (exportTargetSelect.value === "fmea") {
+    exportFormatSelect.value = "json";
+  } else if (exportTargetSelect.value === "project") {
+    exportFormatSelect.value = "json";
+  } else {
+    exportFormatSelect.value = "pdf";
+  }
   updateExportExtensionPreview();
   exportModal.hidden = false;
   exportFilenameInput.focus();
@@ -1613,6 +1682,7 @@ function updateExportExtensionPreview() {
     svg: ".svg",
     png: ".png",
     json: ".json",
+    csv: ".csv",
     sbe: ".sbe",
   };
   exportExtensionPreview.textContent = extensionByFormat[exportFormatSelect.value] || ".pdf";
@@ -1623,6 +1693,13 @@ function getExportFormatOptions(target) {
     return [
       { value: "json", label: "FAUTree JSON (.json)" },
       { value: "sbe", label: "XFTA SBE (.sbe)" },
+    ];
+  }
+
+  if (target === "fmea") {
+    return [
+      { value: "json", label: "FMEA JSON (.json)" },
+      { value: "csv", label: "FMEA CSV (.csv)" },
     ];
   }
 
@@ -2211,6 +2288,15 @@ async function confirmProjectExport() {
     return;
   }
 
+  if (target === "fmea") {
+    if (format === "csv") {
+      await exportFmeaWorksheetCsv(filenameBase);
+      return;
+    }
+    await exportFmeaWorksheetJson(filenameBase);
+    return;
+  }
+
   if (format === "pdf") {
     await exportDiagramPdf(target, filenameBase);
     return;
@@ -2240,6 +2326,45 @@ async function exportJsonProject(filenameBase = safeFilename(projectName)) {
   });
   closeExportModal();
   statusLine.textContent = "Project exported as FAUTree JSON.";
+}
+
+async function exportFmeaWorksheetJson(filenameBase = safeFilename(projectName)) {
+  const payload = buildFmeaExportPayload();
+  await saveTextFile({
+    filename: `${filenameBase}-fmea.json`,
+    content: JSON.stringify(payload, null, 2),
+    type: "application/json",
+    description: "FMEA JSON",
+    extension: ".json",
+  });
+  closeExportModal();
+  statusLine.textContent = "FMEA exported as JSON.";
+}
+
+async function exportFmeaWorksheetCsv(filenameBase = safeFilename(projectName)) {
+  const header = ["Item / Function", "Failure Mode", "Effect", "Cause", "Severity", "Occurrence", "Detectability", "RPN"];
+  const rows = getFmeaRows().map((row) => [
+    row.itemFunction,
+    row.failureMode,
+    row.effect,
+    row.cause,
+    row.severity,
+    row.occurrence,
+    row.detectability,
+    getFmeaRpn(row),
+  ]);
+  const csv = [header, ...rows]
+    .map((cells) => cells.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(","))
+    .join("\n");
+  await saveTextFile({
+    filename: `${filenameBase}-fmea.csv`,
+    content: csv,
+    type: "text/csv",
+    description: "FMEA CSV",
+    extension: ".csv",
+  });
+  closeExportModal();
+  statusLine.textContent = "FMEA exported as CSV.";
 }
 
 async function exportSbeProject(filenameBase = safeFilename(projectName)) {
@@ -2469,6 +2594,13 @@ function buildBddExportSvg() {
     width: 3600,
     height,
   };
+}
+
+function getFmeaRows() {
+  if (!Array.isArray(model.fmeaRows)) {
+    model.fmeaRows = [];
+  }
+  return model.fmeaRows;
 }
 
 function buildReliabilityExportSvg() {
@@ -3009,6 +3141,40 @@ function modelToProjectJson() {
       return payload;
     }),
     edges: buildEdges(),
+    fmea: getFmeaRows().map((row) => ({
+      id: row.id,
+      itemFunction: row.itemFunction,
+      failureMode: row.failureMode,
+      effect: row.effect,
+      cause: row.cause,
+      severity: row.severity,
+      occurrence: row.occurrence,
+      detectability: row.detectability,
+      rpn: getFmeaRpn(row),
+    })),
+  };
+}
+
+function buildFmeaExportPayload() {
+  return {
+    schemaVersion: "0.1.0",
+    project: {
+      id: safeFilename(projectName),
+      name: projectName,
+      description: "",
+      createdBy: "FAUTree",
+    },
+    fmea: getFmeaRows().map((row) => ({
+      id: row.id,
+      itemFunction: row.itemFunction,
+      failureMode: row.failureMode,
+      effect: row.effect,
+      cause: row.cause,
+      severity: row.severity,
+      occurrence: row.occurrence,
+      detectability: row.detectability,
+      rpn: getFmeaRpn(row),
+    })),
   };
 }
 
@@ -3037,11 +3203,34 @@ function importProjectFile(file) {
       if (isSbeFile(file, content)) {
         loadModelFromSbe(content, file.name);
         statusLine.textContent = `Imported XFTA SBE: ${projectName}`;
-      } else {
-        const project = JSON.parse(content);
-        loadProjectFromJson(project);
-        statusLine.textContent = `Imported: ${projectName}`;
+        return;
       }
+
+      const trimmed = content.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed) || Array.isArray(parsed.rows) || Array.isArray(parsed.fmea) || (!parsed.nodes && !parsed.edges)) {
+          const importedRows = parseImportedFmeaContent(trimmed);
+          if (importedRows.length > 0) {
+            applyImportedFmeaRows(importedRows);
+            statusLine.textContent = `Imported ${importedRows.length} FMEA row${importedRows.length === 1 ? "" : "s"}.`;
+            return;
+          }
+        }
+
+        loadProjectFromJson(parsed);
+        statusLine.textContent = `Imported: ${projectName}`;
+        return;
+      }
+
+      const importedRows = parseImportedFmeaContent(content);
+      if (importedRows.length > 0) {
+        applyImportedFmeaRows(importedRows);
+        statusLine.textContent = `Imported ${importedRows.length} FMEA row${importedRows.length === 1 ? "" : "s"}.`;
+        return;
+      }
+
+      throw new Error("Unsupported import format.");
     } catch (error) {
       statusLine.textContent = error.message;
     } finally {
@@ -3054,6 +3243,111 @@ function importProjectFile(file) {
   reader.readAsText(file);
 }
 
+function parseImportedFmeaContent(content) {
+  const trimmed = String(content || "").trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("[")) {
+    return JSON.parse(trimmed).map((row, index) => createFmeaRow({ ...row, id: row.id || `fmea-row-${index + 1}` }));
+  }
+
+  if (trimmed.startsWith("{")) {
+    const payload = JSON.parse(trimmed);
+    if (Array.isArray(payload.fmea)) {
+      return payload.fmea.map((row, index) => createFmeaRow({ ...row, id: row.id || `fmea-row-${index + 1}` }));
+    }
+    if (Array.isArray(payload.rows)) {
+      return payload.rows.map((row, index) => createFmeaRow({ ...row, id: row.id || `fmea-row-${index + 1}` }));
+    }
+  }
+
+  return parseFmeaCsv(trimmed);
+}
+
+function parseFmeaCsv(content) {
+  const lines = String(content || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const headers = splitCsvLine(lines[0]).map((header) => normalizeFmeaHeader(header));
+  const indexByHeader = new Map(headers.map((header, index) => [header, index]));
+  const hasRecognizedHeader = ["itemfunction", "failuremode", "effect", "cause", "severity", "occurrence", "detectability"].some((header) => indexByHeader.has(header));
+  if (!hasRecognizedHeader) {
+    throw new Error("Unsupported FMEA CSV format.");
+  }
+
+  return lines.slice(1).map((line, index) => {
+    const cells = splitCsvLine(line);
+    return createFmeaRow({
+      id: `fmea-row-${index + 1}`,
+      itemFunction: readCsvCell(cells, indexByHeader, "itemfunction", "item"),
+      failureMode: readCsvCell(cells, indexByHeader, "failuremode"),
+      effect: readCsvCell(cells, indexByHeader, "effect"),
+      cause: readCsvCell(cells, indexByHeader, "cause"),
+      severity: readCsvCell(cells, indexByHeader, "severity"),
+      occurrence: readCsvCell(cells, indexByHeader, "occurrence"),
+      detectability: readCsvCell(cells, indexByHeader, "detectability", "detection"),
+    });
+  });
+}
+
+function normalizeFmeaHeader(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function splitCsvLine(line) {
+  const cells = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (character === "," && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function readCsvCell(cells, indexByHeader, ...headerNames) {
+  for (const headerName of headerNames) {
+    const index = indexByHeader.get(normalizeFmeaHeader(headerName));
+    if (index !== undefined) {
+      return cells[index] ?? "";
+    }
+  }
+  return "";
+}
+
+function applyImportedFmeaRows(importedRows) {
+  pushUndoSnapshot();
+  model.fmeaRows = importedRows;
+  renderFmeaTable();
+}
+
 function isSbeFile(file, content) {
   return file.name.toLowerCase().endsWith(".sbe") || /^\s*(gate|basic-event)\s+/im.test(content);
 }
@@ -3062,6 +3356,7 @@ function loadModelFromSbe(content, filename) {
   const imported = parseSbeModel(content);
   pushUndoSnapshot();
   model = imported;
+  model.fmeaRows = [];
   selectedNodeId = model.rootId;
   updateNodeSequence();
   setProjectName(filename ? filename.replace(/\.sbe$/i, "") : "Imported XFTA SBE");
@@ -3241,6 +3536,7 @@ function loadProjectFromJson(project) {
   model = {
     rootId: topNodes[0].id,
     nodes: importedNodes,
+    fmeaRows: Array.isArray(project.fmea) ? project.fmea.map((row) => createFmeaRow(row)) : [],
   };
   selectedNodeId = model.rootId;
   updateNodeSequence();
@@ -4014,6 +4310,139 @@ function renderAnalysisSummary(cutSets, topProbability, analysisDuration, bdd) {
   summaryAnalysisEngine.textContent = "Python backend";
 }
 
+function renderFmeaTable() {
+  if (!fmeaTableBody) {
+    return;
+  }
+
+  const rows = getFmeaRows();
+  fmeaTableBody.innerHTML = "";
+
+  if (rows.length === 0) {
+    const emptyRow = document.createElement("tr");
+    emptyRow.innerHTML = '<td colspan="9">Add your first FMEA row to begin.</td>';
+    fmeaTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.dataset.rowId = row.id;
+
+    const itemCell = document.createElement("td");
+    itemCell.appendChild(createFmeaInput(row, "itemFunction", "Item / Function"));
+    tr.appendChild(itemCell);
+
+    const failureCell = document.createElement("td");
+    failureCell.appendChild(createFmeaInput(row, "failureMode", "Failure Mode"));
+    tr.appendChild(failureCell);
+
+    const effectCell = document.createElement("td");
+    effectCell.appendChild(createFmeaInput(row, "effect", "Effect"));
+    tr.appendChild(effectCell);
+
+    const causeCell = document.createElement("td");
+    causeCell.appendChild(createFmeaInput(row, "cause", "Cause"));
+    tr.appendChild(causeCell);
+
+    const severityCell = document.createElement("td");
+    severityCell.appendChild(createFmeaNumberInput(row, "severity"));
+    tr.appendChild(severityCell);
+
+    const occurrenceCell = document.createElement("td");
+    occurrenceCell.appendChild(createFmeaNumberInput(row, "occurrence"));
+    tr.appendChild(occurrenceCell);
+
+    const detectabilityCell = document.createElement("td");
+    detectabilityCell.appendChild(createFmeaNumberInput(row, "detectability"));
+    tr.appendChild(detectabilityCell);
+
+    const rpnCell = document.createElement("td");
+    const rpnValue = document.createElement("span");
+    rpnValue.className = "fmea-rpn";
+    rpnValue.dataset.fmeaRpnFor = row.id;
+    rpnValue.textContent = String(getFmeaRpn(row));
+    rpnCell.appendChild(rpnValue);
+    tr.appendChild(rpnCell);
+
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "fmea-actions";
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "quiet-button danger-button fmea-delete-button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => deleteFmeaRow(row.id));
+    actionsCell.appendChild(deleteButton);
+    tr.appendChild(actionsCell);
+
+    fmeaTableBody.appendChild(tr);
+  });
+}
+
+function createFmeaInput(row, field, placeholder) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "fmea-field";
+  input.value = row[field] || "";
+  input.placeholder = placeholder;
+  input.addEventListener("input", () => {
+    row[field] = input.value;
+  });
+  return input;
+}
+
+function createFmeaNumberInput(row, field) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "fmea-field fmea-number";
+  input.min = "1";
+  input.max = "10";
+  input.step = "1";
+  input.value = String(row[field] || 1);
+  input.addEventListener("input", () => {
+    row[field] = normalizeFmeaScore(input.value, row[field] || 1);
+    input.value = String(row[field]);
+    updateFmeaRpnCell(row.id);
+  });
+  return input;
+}
+
+function updateFmeaRpnCell(rowId) {
+  const row = getFmeaRows().find((item) => item.id === rowId);
+  const rpnCell = document.querySelector(`[data-fmea-rpn-for="${rowId}"]`);
+  if (rpnCell && row) {
+    rpnCell.textContent = String(getFmeaRpn(row));
+  }
+}
+
+function addFmeaRow() {
+  pushUndoSnapshot();
+  getFmeaRows().push(createFmeaRow());
+  renderFmeaTable();
+  statusLine.textContent = "FMEA row added.";
+}
+
+function deleteFmeaRow(rowId) {
+  pushUndoSnapshot();
+  model.fmeaRows = getFmeaRows().filter((row) => row.id !== rowId);
+  renderFmeaTable();
+  statusLine.textContent = "FMEA row deleted.";
+}
+
+function sortFmeaRowsByRpn() {
+  pushUndoSnapshot();
+  model.fmeaRows = [...getFmeaRows()].sort((left, right) => {
+    const rightScore = getFmeaRpn(right);
+    const leftScore = getFmeaRpn(left);
+    if (rightScore !== leftScore) {
+      return rightScore - leftScore;
+    }
+    return String(left.itemFunction || left.failureMode || left.id).localeCompare(String(right.itemFunction || right.failureMode || right.id));
+  });
+  renderFmeaTable();
+  statusLine.textContent = "FMEA rows sorted by RPN.";
+}
+
 function findDominantCutSet(cutSets) {
   return cutSets
     .map((cutSet) => ({
@@ -4201,6 +4630,7 @@ function renderAll() {
   refreshInvalidNodes();
   renderCanvas();
   renderCustomBddOrderEditor();
+  renderFmeaTable();
   renderTreeList();
   selectNode(selectedNodeId);
 }
@@ -4286,6 +4716,8 @@ document.querySelector("#new-project").addEventListener("click", createNewProjec
 document.querySelector("#rename-project").addEventListener("click", renameProject);
 document.querySelector("#import-project").addEventListener("click", () => importProjectInput.click());
 document.querySelector("#export-project").addEventListener("click", exportProject);
+addFmeaRowButton?.addEventListener("click", addFmeaRow);
+sortFmeaRowsButton?.addEventListener("click", sortFmeaRowsByRpn);
 showReliabilityGraphButton.addEventListener("click", openReliabilityModal);
 closeReliabilityButton.addEventListener("click", closeReliabilityModal);
 toggleReliabilityMaximizeButton?.addEventListener("click", toggleReliabilityModalMaximize);
@@ -4360,6 +4792,7 @@ updateCustomBddOrderVisibility();
 syncBddSettingsVisibility();
 syncRepeatedBasicEventDisplayButton();
 syncToolButtons();
+renderFmeaTable();
 renderAll();
 clearAnalysisResults("Add gates and basic events to compute cut sets.");
 statusLine.textContent = "New project created with an empty top event.";

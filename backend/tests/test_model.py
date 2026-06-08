@@ -51,6 +51,34 @@ class AnalysisSettingsTests(unittest.TestCase):
         self.assertEqual(project.analysis.reliability_y_max, 1.2)
         self.assertEqual(project.analysis.to_dict()["missionTimeHours"], 7200.0)
 
+    def test_fault_tree_project_round_trips_fmea_rows(self) -> None:
+        project = FaultTreeProject.from_dict(
+            {
+                "schemaVersion": "0.1.0",
+                "project": {"id": "demo", "name": "Demo"},
+                "analysis": {},
+                "nodes": [],
+                "edges": [],
+                "fmea": [
+                    {
+                        "id": "row-1",
+                        "itemFunction": "Pump",
+                        "failureMode": "Stops",
+                        "effect": "No flow",
+                        "cause": "Motor burnout",
+                        "severity": 9,
+                        "occurrence": 3,
+                        "detectability": 4,
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(len(project.fmea), 1)
+        self.assertEqual(project.fmea[0].item_function, "Pump")
+        self.assertEqual(project.fmea[0].detectability, 4)
+        self.assertEqual(project.to_dict()["fmea"][0]["rpn"], 108)
+
 
 if __name__ == "__main__":
     unittest.main()

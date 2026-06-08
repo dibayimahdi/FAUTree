@@ -49,6 +49,31 @@ class FaultTreeEdge:
 
 
 @dataclass(frozen=True)
+class FmeaRow:
+    id: str
+    item_function: str = ""
+    failure_mode: str = ""
+    effect: str = ""
+    cause: str = ""
+    severity: int = 1
+    occurrence: int = 1
+    detectability: int = 1
+
+    def to_dict(self) -> dict[str, str | int]:
+        return {
+            "id": self.id,
+            "itemFunction": self.item_function,
+            "failureMode": self.failure_mode,
+            "effect": self.effect,
+            "cause": self.cause,
+            "severity": self.severity,
+            "occurrence": self.occurrence,
+            "detectability": self.detectability,
+            "rpn": self.severity * self.occurrence * self.detectability,
+        }
+
+
+@dataclass(frozen=True)
 class AnalysisSettings:
     quantification: str = "rare-event-approximation"
     variable_ordering: str = "infix"
@@ -99,6 +124,7 @@ class FaultTreeProject:
     analysis: AnalysisSettings
     nodes: list[FaultTreeNode] = field(default_factory=list)
     edges: list[FaultTreeEdge] = field(default_factory=list)
+    fmea: list[FmeaRow] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -107,6 +133,7 @@ class FaultTreeProject:
             "analysis": self.analysis.to_dict(),
             "nodes": [node.to_dict() for node in self.nodes],
             "edges": [edge.to_dict() for edge in self.edges],
+            "fmea": [row.to_dict() for row in self.fmea],
         }
 
     @classmethod
@@ -144,6 +171,10 @@ class FaultTreeProject:
             edges=[
                 FaultTreeEdge(source=edge["source"], target=edge["target"])
                 for edge in payload.get("edges", [])
+            ],
+            fmea=[
+                cls._fmea_from_dict(row, index)
+                for index, row in enumerate(payload.get("fmea", []), start=1)
             ],
         )
 
@@ -192,6 +223,14 @@ class FaultTreeProject:
                     f'Repeated basic event "{label}" has inconsistent probabilities.'
                 )
 
+        for row in self.fmea:
+            if row.severity < 1 or row.severity > 10:
+                errors.append(f"FMEA row {row.id} has severity outside the 1-10 range.")
+            if row.occurrence < 1 or row.occurrence > 10:
+                errors.append(f"FMEA row {row.id} has occurrence outside the 1-10 range.")
+            if row.detectability < 1 or row.detectability > 10:
+                errors.append(f"FMEA row {row.id} has detectability outside the 1-10 range.")
+
         if self.analysis.mission_time_hours <= 0:
             errors.append("Mission time must be greater than zero.")
         if self.analysis.reliability_x_min_hours < 0:
@@ -217,4 +256,17 @@ class FaultTreeProject:
             voting_threshold=int(voting_threshold) if voting_threshold is not None else None,
             failure_rate=node.get("failureRate"),
             probability=node.get("probability", node.get("failureRate")),
+        )
+
+    @staticmethod
+    def _fmea_from_dict(row: dict, index: int) -> FmeaRow:
+        return FmeaRow(
+            id=row.get("id", f"fmea-row-{index}"),
+            item_function=row.get("itemFunction", row.get("item", "")),
+            failure_mode=row.get("failureMode", ""),
+            effect=row.get("effect", ""),
+            cause=row.get("cause", ""),
+            severity=int(row.get("severity", 1) or 1),
+            occurrence=int(row.get("occurrence", 1) or 1),
+            detectability=int(row.get("detectability", row.get("detection", 1)) or 1),
         )

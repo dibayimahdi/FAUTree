@@ -696,7 +696,8 @@ button {
   padding: 0 10px;
 }
 
-.textual-builder {
+.textual-builder,
+.fmea-builder {
   min-height: 0;
   margin: 0 20px 16px;
   padding: 16px;
@@ -963,6 +964,106 @@ button {
 .qualitative-toggle-button:focus-visible {
   background: rgba(18, 107, 100, 0.12);
   color: var(--teal);
+}
+
+.fmea-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(18, 107, 100, 0.05), rgba(255, 253, 249, 0.95)),
+    #fffdf9;
+}
+
+.fmea-toolbar h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.fmea-toolbar p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fmea-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.fmea-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf9;
+}
+
+.fmea-table {
+  min-width: 1120px;
+  font-size: 12px;
+}
+
+.fmea-table th,
+.fmea-table td {
+  vertical-align: top;
+}
+
+.fmea-table th {
+  white-space: nowrap;
+}
+
+.fmea-field {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid rgba(49, 95, 125, 0.16);
+  border-radius: 7px;
+  padding: 0 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.fmea-field:focus {
+  outline: 2px solid rgba(18, 107, 100, 0.24);
+  outline-offset: 1px;
+}
+
+.fmea-number {
+  width: 80px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.fmea-rpn {
+  display: inline-flex;
+  align-items: center;
+  min-width: 62px;
+  justify-content: center;
+  padding: 0 10px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--teal-2);
+  color: var(--teal);
+  font-weight: 800;
+}
+
+.fmea-actions {
+  white-space: nowrap;
+}
+
+.fmea-delete-button {
+  min-width: 66px;
+  height: 34px;
 }
 
 table {

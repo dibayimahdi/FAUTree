@@ -19,11 +19,12 @@
         <nav class="top-tabs" role="tablist" aria-label="Primary">
           <button class="top-tab is-active" data-top-nav="graphical">Graphical</button>
           <button class="top-tab" data-top-nav="boolean">Boolean</button>
+          <button class="top-tab" data-top-nav="fmea">FMEA</button>
         </nav>
         <div class="top-actions">
           <button class="quiet-button" id="import-project">Import</button>
           <button class="quiet-button" id="export-project">Export</button>
-          <input id="import-project-file" class="sr-only-input" type="file" accept=".json,.sbe">
+          <input id="import-project-file" class="sr-only-input" type="file" accept=".json,.sbe,.csv">
           <button class="quiet-button" id="show-shortcuts" title="Show keyboard shortcuts">Shortcuts</button>
           <button class="primary-button" id="run-analysis" title="Run Analysis (Ctrl+Enter)">Run Analysis</button>
         </div>
@@ -157,6 +158,41 @@
               <button class="primary-button" id="apply-text-model">Generate Fault Tree</button>
               <button class="quiet-button" id="reset-text-model">Clear Expression</button>
             </div>
+          </div>
+        </section>
+
+        <section class="builder-panel fmea-builder" data-builder-panel="fmea">
+          <div class="fmea-toolbar">
+            <div>
+              <h3>FMEA</h3>
+              <p>Risk Priority Number (RPN) = Severity &times; Occurrence &times; Detectability</p>
+            </div>
+            <div class="fmea-toolbar-actions">
+              <button class="primary-button" id="add-fmea-row" type="button">Add Row</button>
+              <button class="quiet-button" id="sort-fmea-rows" type="button">Sort by RPN</button>
+            </div>
+          </div>
+          <div class="fmea-table-wrap">
+            <table class="fmea-table">
+              <thead>
+                <tr>
+                  <th>Item / Function</th>
+                  <th>Failure Mode</th>
+                  <th>Effect</th>
+                  <th>Cause</th>
+                  <th>Severity</th>
+                  <th>Occurrence</th>
+                  <th>Detectability</th>
+                  <th>RPN</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="fmea-table-body">
+                <tr>
+                  <td colspan="9">Add your first FMEA row to begin.</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
       </main>
@@ -393,7 +429,7 @@
         <div class="modal-header">
           <div>
             <h2 id="export-title">Export Project</h2>
-            <p>Export the current fault tree or BDD as PDF, SVG, or PNG.</p>
+            <p>Export the current project, FMEA rows, or the selected diagram as PDF, SVG, PNG, JSON, or CSV.</p>
           </div>
           <button class="icon-button" id="close-export" title="Close export" aria-label="Close export">x</button>
         </div>
@@ -410,6 +446,7 @@
             <select id="export-target-select">
               <option value="fault-tree">Fault tree</option>
               <option value="bdd">BDD</option>
+              <option value="fmea">FMEA</option>
             </select>
           </label>
           <label class="field export-field">
@@ -418,6 +455,8 @@
               <option value="pdf">PDF (.pdf)</option>
               <option value="svg">SVG (.svg)</option>
               <option value="png">PNG (.png)</option>
+              <option value="json">JSON (.json)</option>
+              <option value="csv">CSV (.csv)</option>
             </select>
           </label>
         </div>
