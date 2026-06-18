@@ -9,6 +9,7 @@ The platform should support:
 - graphical fault tree modeling
 - qualitative analysis with minimal cut sets
 - quantitative analysis with event probabilities/unavailabilities
+- semiconductor-oriented FMEDA with exida-style lambda buckets
 - BDD conversion and variable ordering experiments
 - product-line and variant-rich fault tree analysis
 - report export for papers, thesis chapters, and engineering documentation
@@ -71,6 +72,7 @@ Core entities:
 - edges: parent-child relationships
 - analysis settings: mission time, units, variable ordering strategy
 - basic event reliability data
+- FMEDA rows with component type, function, failure mode, FIT, IEC 61508 category, safety mechanism, diagnostic coverage, SPF/RF/MPF classification, latent flag, and a link to a fault tree event
 
 ## Analysis Direction
 
@@ -79,4 +81,6 @@ Core entities:
 3. Generate Boolean expressions for qualitative and BDD analysis.
 4. Use MOCUS/minimization for minimal cut sets.
 5. Use BDDs for exact probability and ordering comparison.
-6. Keep Monte Carlo as a separate module for stochastic and variant-rich cases.
+6. Derive row-level FMEDA lambda buckets from FIT, IEC 61508 failure category, and diagnostic coverage.
+7. Aggregate rows by component/item before computing SPFM, LFM, PMHF, and SFF.
+8. Keep Monte Carlo as a separate module for stochastic and variant-rich cases.

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FAUTree</title>
-    <link rel="stylesheet" href="./styles.css?v=20260604-hidden-fields">
+    <link rel="stylesheet" href="./styles.css?v=20260610-fmeda">
   </head>
   <body>
     <div class="app-shell">
@@ -19,7 +19,7 @@
         <nav class="top-tabs" role="tablist" aria-label="Primary">
           <button class="top-tab is-active" data-top-nav="graphical">Graphical</button>
           <button class="top-tab" data-top-nav="boolean">Boolean</button>
-          <button class="top-tab" data-top-nav="fmea">FMEA</button>
+          <button class="top-tab" data-top-nav="fmea">FMEDA</button>
         </nav>
         <div class="top-actions">
           <button class="quiet-button" id="import-project">Import</button>
@@ -164,32 +164,142 @@
         <section class="builder-panel fmea-builder" data-builder-panel="fmea">
           <div class="fmea-toolbar">
             <div>
-              <h3>FMEA</h3>
-              <p>Risk Priority Number (RPN) = Severity &times; Occurrence &times; Detectability</p>
+              <h3>Semiconductor FMEDA</h3>
+              <p>Enter FIT, dangerous classification, and diagnostic coverage; lambda buckets are generated.</p>
             </div>
             <div class="fmea-toolbar-actions">
               <button class="primary-button" id="add-fmea-row" type="button">Add Row</button>
-              <button class="quiet-button" id="sort-fmea-rows" type="button">Sort by RPN</button>
+              <button class="quiet-button" id="sort-fmea-rows" type="button">Sort by &lambda;DU</button>
+            </div>
+          </div>
+          <div class="fmeda-summary" aria-label="FMEDA summary">
+            <div>
+              <span>&lambda;SD</span>
+              <strong data-fmeda-summary="lambdaSD">0</strong>
+            </div>
+            <div>
+              <span>&lambda;SU</span>
+              <strong data-fmeda-summary="lambdaSU">0</strong>
+            </div>
+            <div>
+              <span>&lambda;DD</span>
+              <strong data-fmeda-summary="lambdaDD">0</strong>
+            </div>
+            <div>
+              <span>&lambda;DU</span>
+              <strong data-fmeda-summary="lambdaDU">0</strong>
+            </div>
+            <div>
+              <span>Total FIT</span>
+              <strong data-fmeda-summary="lambdaTotal">0</strong>
+            </div>
+            <div>
+              <span>Dangerous DC</span>
+              <strong data-fmeda-summary="dangerousDiagnosticCoverage">0%</strong>
+            </div>
+            <div>
+              <span>&lambda;A</span>
+              <strong data-fmeda-summary="lambdaAnnunciation">Not classified</strong>
+            </div>
+            <div>
+              <span>&lambda;NE</span>
+              <strong data-fmeda-summary="lambdaNoEffect">Not classified</strong>
+            </div>
+            <div>
+              <span>SPFM</span>
+              <strong data-fmeda-summary="spfm">Item level</strong>
+            </div>
+            <div>
+              <span>LFM</span>
+              <strong data-fmeda-summary="lfm">Item level</strong>
+            </div>
+            <div>
+              <span>PMHF</span>
+              <strong data-fmeda-summary="pmhf">Item level</strong>
+            </div>
+            <div>
+              <span>SFF</span>
+              <strong data-fmeda-summary="sff">Item level</strong>
             </div>
           </div>
           <div class="fmea-table-wrap">
             <table class="fmea-table">
               <thead>
                 <tr>
-                  <th>Item / Function</th>
+                  <th>Component Type</th>
+                  <th>Function</th>
                   <th>Failure Mode</th>
+                  <th>FIT</th>
                   <th>Effect</th>
-                  <th>Cause</th>
-                  <th>Severity</th>
-                  <th>Occurrence</th>
-                  <th>Detectability</th>
-                  <th>RPN</th>
+                  <th>IEC 61508 Mode</th>
+                  <th>Safety Mechanism</th>
+                  <th>DC (%)</th>
+                  <th>Fault Class</th>
+                  <th>Latent?</th>
+                  <th>FT Event</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="fmea-table-body">
                 <tr>
-                  <td colspan="9">Add your first FMEA row to begin.</td>
+                  <td colspan="12">Add your first FMEDA row to begin.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="fmeda-results-heading">
+            <span>Generated Results</span>
+          </div>
+          <div class="fmea-table-wrap">
+            <table class="fmea-table fmeda-results-table">
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>Failure Mode</th>
+                  <th>&lambda;SD</th>
+                  <th>&lambda;SU</th>
+                  <th>&lambda;DD</th>
+                  <th>&lambda;DU</th>
+                  <th>&lambda;A</th>
+                  <th>&lambda;NE</th>
+                  <th>Total FIT</th>
+                  <th>Dangerous DC</th>
+                  <th>SPF</th>
+                  <th>RF</th>
+                  <th>MPF</th>
+                  <th>Latent</th>
+                  <th>FT Event</th>
+                </tr>
+              </thead>
+              <tbody id="fmeda-results-table-body">
+                <tr>
+                  <td colspan="15">Generated lambda results will appear here.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="fmeda-results-heading">
+            <span>Item-Level Metrics</span>
+          </div>
+          <div class="fmea-table-wrap">
+            <table class="fmea-table fmeda-item-metrics-table">
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>Rows</th>
+                  <th>Total FIT</th>
+                  <th>&lambda;SPF</th>
+                  <th>&lambda;RF</th>
+                  <th>&lambda;MPF</th>
+                  <th>SPFM</th>
+                  <th>LFM</th>
+                  <th>PMHF</th>
+                  <th>SFF</th>
+                </tr>
+              </thead>
+              <tbody id="fmeda-item-metrics-table-body">
+                <tr>
+                  <td colspan="10">Item-level metrics will appear after FMEDA rows are added.</td>
                 </tr>
               </tbody>
             </table>
@@ -429,7 +539,7 @@
         <div class="modal-header">
           <div>
             <h2 id="export-title">Export Project</h2>
-            <p>Export the current project, FMEA rows, or the selected diagram as PDF, SVG, PNG, JSON, or CSV.</p>
+            <p>Export the current project, FMEDA rows, or the selected diagram as PDF, SVG, PNG, JSON, or CSV.</p>
           </div>
           <button class="icon-button" id="close-export" title="Close export" aria-label="Close export">x</button>
         </div>
@@ -446,7 +556,7 @@
             <select id="export-target-select">
               <option value="fault-tree">Fault tree</option>
               <option value="bdd">BDD</option>
-              <option value="fmea">FMEA</option>
+              <option value="fmea">FMEDA</option>
             </select>
           </label>
           <label class="field export-field">

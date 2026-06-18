@@ -999,6 +999,36 @@ button {
   flex: 0 0 auto;
 }
 
+.fmeda-summary {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(92px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.fmeda-summary div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.fmeda-summary span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fmeda-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
 .fmea-table-wrap {
   overflow: auto;
   border: 1px solid var(--line);
@@ -1007,8 +1037,12 @@ button {
 }
 
 .fmea-table {
-  min-width: 1120px;
+  min-width: 1440px;
   font-size: 12px;
+}
+
+.fmeda-results-table {
+  min-width: 1320px;
 }
 
 .fmea-table th,
@@ -1044,6 +1078,58 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.fmeda-lambda {
+  width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fmeda-percent {
+  width: 84px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fmeda-select {
+  min-width: 86px;
+}
+
+.fmeda-category-select {
+  min-width: 132px;
+}
+
+.fmeda-library-field {
+  min-width: 150px;
+}
+
+.fmeda-checkbox-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.fmeda-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--teal);
+}
+
+.fmeda-results-heading {
+  display: flex;
+  align-items: center;
+  margin: 16px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fmeda-classification-mark {
+  text-align: center;
+  color: var(--teal);
+  font-weight: 900;
+}
+
 .fmea-rpn {
   display: inline-flex;
   align-items: center;
@@ -1064,6 +1150,12 @@ button {
 .fmea-delete-button {
   min-width: 66px;
   height: 34px;
+}
+
+@media (max-width: 920px) {
+  .fmeda-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 table {

@@ -9,6 +9,134 @@ const defaultReliabilityViewport = {
   yMin: 0,
   yMax: 1.05,
 };
+const fmedaFailureModeLibrary = {
+  digital: ["Stuck-at-0", "Stuck-at-1", "Delay Fault", "Timing Violation", "Open Circuit", "Short Circuit", "Bit Flip", "Incorrect Output"],
+  memory: ["Single Bit Corruption", "Multi Bit Corruption", "Read Failure", "Write Failure", "Address Decoder Failure", "Retention Failure"],
+  adc: ["Stuck High", "Stuck Low", "Gain Error", "Offset Error", "Missing Conversion", "Wrong Conversion Result"],
+  pll: ["Loss of Lock", "Wrong Frequency", "No Clock Output", "Clock Drift"],
+  watchdog: ["Timeout Failure", "False Trigger", "Missed Trigger"],
+  communication: ["Message Loss", "Incorrect Message", "Bus-Off Failure", "Protocol State Error", "Arbitration Failure", "CRC Error Not Detected"],
+  power: ["Output Stuck Low", "Output Stuck High", "Overvoltage", "Undervoltage", "No Regulation", "Reference Drift"],
+  analog: ["Output Saturation", "Offset Error", "Gain Error", "Open Input", "Shorted Input", "Reference Drift"],
+  io: ["Input Stuck", "Output Stuck", "Pad Short", "Pad Open", "Incorrect Interrupt", "Drive Strength Error"],
+  timer: ["Timeout Error", "Wrong Period", "Missed Compare", "False Capture", "Counter Stuck"],
+  sensor: ["Channel Failure", "Wrong Sensor Value", "Signal Saturation", "Interface Timeout", "Plausibility Failure"],
+};
+const fmedaSafetyMechanismLibrary = {
+  digital: ["Lockstep", "LBIST", "Program Flow Monitor", "Watchdog", "Clock Monitor"],
+  memory: ["ECC", "Parity", "CRC", "Memory Scrubbing", "MBIST"],
+  adc: ["Range Check", "Plausibility Check", "Redundant ADC", "Reference Voltage Monitor"],
+  pll: ["Clock Monitor", "Lock Detector", "Frequency Monitor", "Redundant Clock"],
+  watchdog: ["Window Watchdog", "Independent Clock", "Timeout Monitor", "Reset Escalation"],
+  communication: ["CRC", "Timeout Monitor", "Sequence Counter", "End-to-End Protection"],
+  power: ["Voltage Monitor", "Brown-Out Detector", "Redundant Reference", "Power-On Reset"],
+  analog: ["Range Check", "Plausibility Check", "Reference Voltage Monitor", "Redundant Channel"],
+  io: ["Readback Check", "Pad Monitor", "Redundant IO", "Interrupt Plausibility Check"],
+  timer: ["Redundant Timer", "Clock Monitor", "Compare Readback", "Timeout Monitor"],
+  sensor: ["Plausibility Check", "Redundant Sensor Channel", "Range Check", "Interface Timeout Monitor"],
+};
+const fmedaDiagnosticCoverageDefaults = [
+  { patterns: ["lockstep"], coverage: 99 },
+  { patterns: ["ecc"], coverage: 95 },
+  { patterns: ["lbist", "mbist", "bist"], coverage: 90 },
+  { patterns: ["redundant adc", "redundant sensor", "redundant channel", "redundant clock", "redundant timer", "redundant reference", "redundant io"], coverage: 99 },
+  { patterns: ["end-to-end", "e2e"], coverage: 90 },
+  { patterns: ["crc"], coverage: 90 },
+  { patterns: ["window watchdog", "watchdog"], coverage: 90 },
+  { patterns: ["range check"], coverage: 90 },
+  { patterns: ["plausibility"], coverage: 90 },
+  { patterns: ["reference voltage monitor", "voltage monitor", "brown-out"], coverage: 90 },
+  { patterns: ["clock monitor", "frequency monitor", "lock detector"], coverage: 90 },
+  { patterns: ["timeout"], coverage: 80 },
+  { patterns: ["sequence counter"], coverage: 80 },
+  { patterns: ["parity"], coverage: 70 },
+  { patterns: ["readback"], coverage: 70 },
+  { patterns: ["memory scrubbing"], coverage: 80 },
+  { patterns: ["program flow monitor"], coverage: 80 },
+  { patterns: ["pad monitor", "interrupt plausibility"], coverage: 70 },
+  { patterns: ["none", "no diagnostic"], coverage: 0 },
+];
+const fmedaFamilyDiagnosticCoverageDefaults = {
+  adc: 90,
+  analog: 80,
+  communication: 90,
+  digital: 80,
+  io: 70,
+  memory: 90,
+  pll: 90,
+  power: 85,
+  sensor: 90,
+  timer: 80,
+  watchdog: 90,
+};
+const fmedaComponentLibrary = {
+  "CPU Core": { family: "digital", functions: ["Instruction Execution", "Arithmetic Processing", "Program Flow Control", "Interrupt Handling", "Memory Access", "Safety Monitoring"] },
+  "Lockstep CPU": { family: "digital", functions: ["Instruction Execution", "Program Flow Control", "Safety Monitoring", "Comparator Checking"] },
+  DSP: { family: "digital", functions: ["Signal Processing", "Arithmetic Processing", "Data Path Execution"] },
+  "AI Accelerator": { family: "digital", functions: ["Inference Execution", "Matrix Processing", "Accelerated Signal Processing"] },
+  Coprocessor: { family: "digital", functions: ["Auxiliary Processing", "Peripheral Offload", "Arithmetic Processing"] },
+  "Hardware Security Module (HSM)": { family: "digital", functions: ["Secure Key Storage", "Cryptographic Processing", "Secure Boot Support"] },
+  "Safety Management Unit (SMU)": { family: "digital", functions: ["Fault Collection", "Fault Reaction", "Safety State Control"] },
+  SRAM: { family: "memory", functions: ["Data Storage", "Data Retention", "Read Access", "Write Access"] },
+  Flash: { family: "memory", functions: ["Program Storage", "Data Retention", "Read Access", "Write Access"] },
+  EEPROM: { family: "memory", functions: ["Parameter Storage", "Data Retention", "Read Access", "Write Access"] },
+  ROM: { family: "memory", functions: ["Program Storage", "Read Access", "Boot Code Storage"] },
+  Cache: { family: "memory", functions: ["Instruction Caching", "Data Caching", "Read Access", "Write Access"] },
+  "Register File": { family: "memory", functions: ["Register Storage", "Read Access", "Write Access"] },
+  "Shared Memory": { family: "memory", functions: ["Shared Data Storage", "Inter-Core Communication", "Read Access", "Write Access"] },
+  "NVM Controller": { family: "memory", functions: ["NVM Access Control", "Program Operation", "Erase Operation", "Read Access"] },
+  "Crystal Oscillator": { family: "pll", functions: ["Clock Generation", "Reference Clock Generation", "Clock Startup"] },
+  "Internal Oscillator": { family: "pll", functions: ["Clock Generation", "Reference Clock Generation", "Low-Power Clocking"] },
+  PLL: { family: "pll", functions: ["Clock Generation", "Frequency Multiplication", "Clock Synchronization"] },
+  "Clock Divider": { family: "pll", functions: ["Clock Division", "Clock Distribution", "Frequency Scaling"] },
+  "Clock Monitor": { family: "pll", functions: ["Clock Monitoring", "Frequency Monitoring", "Loss-of-Clock Detection"] },
+  "Clock Distribution Network": { family: "pll", functions: ["Clock Distribution", "Clock Gating", "Clock Synchronization"] },
+  LDO: { family: "power", functions: ["Voltage Regulation", "Supply Filtering", "Load Regulation"] },
+  "DC/DC Converter": { family: "power", functions: ["Voltage Conversion", "Current Supply", "Load Regulation"] },
+  "Power Management Unit": { family: "power", functions: ["Power Sequencing", "Voltage Monitoring", "Power State Control"] },
+  "Voltage Regulator": { family: "power", functions: ["Voltage Regulation", "Current Supply", "Load Regulation"] },
+  "Bandgap Reference": { family: "power", functions: ["Reference Generation", "Bias Generation", "Temperature-Stable Reference"] },
+  "Brown-Out Detector": { family: "power", functions: ["Undervoltage Detection", "Reset Request", "Supply Monitoring"] },
+  "Power Supervisor": { family: "power", functions: ["Supply Monitoring", "Reset Control", "Power Fault Detection"] },
+  ADC: { family: "adc", functions: ["Voltage Measurement", "Current Measurement", "Sensor Sampling", "Signal Conversion"] },
+  DAC: { family: "analog", functions: ["Analog Output Generation", "Reference Generation", "Signal Conversion"] },
+  Comparator: { family: "analog", functions: ["Threshold Detection", "Signal Comparison", "Fault Detection"] },
+  "Operational Amplifier": { family: "analog", functions: ["Signal Amplification", "Buffering", "Signal Conditioning"] },
+  "Voltage Reference": { family: "analog", functions: ["Reference Generation", "Bias Generation", "Measurement Reference"] },
+  "Current Sense Amplifier": { family: "analog", functions: ["Current Measurement", "Signal Amplification", "Overcurrent Detection"] },
+  "Temperature Sensor": { family: "sensor", functions: ["Temperature Measurement", "Thermal Monitoring", "Overtemperature Detection"] },
+  "CAN Controller": { family: "communication", functions: ["Message Transmission", "Message Reception", "Error Detection", "Bus Arbitration"] },
+  "CAN FD Controller": { family: "communication", functions: ["Message Transmission", "Message Reception", "Error Detection", "Bus Arbitration"] },
+  "LIN Controller": { family: "communication", functions: ["Message Transmission", "Message Reception", "Error Detection"] },
+  SPI: { family: "communication", functions: ["Serial Transmission", "Serial Reception", "Peripheral Communication"] },
+  I2C: { family: "communication", functions: ["Serial Transmission", "Serial Reception", "Peripheral Communication", "Bus Arbitration"] },
+  UART: { family: "communication", functions: ["Serial Transmission", "Serial Reception", "Frame Detection"] },
+  "Ethernet MAC": { family: "communication", functions: ["Frame Transmission", "Frame Reception", "Error Detection"] },
+  "Ethernet PHY": { family: "communication", functions: ["Physical Layer Transmission", "Physical Layer Reception", "Link Monitoring"] },
+  "FlexRay Controller": { family: "communication", functions: ["Message Transmission", "Message Reception", "Schedule Control", "Error Detection"] },
+  "Watchdog Timer": { family: "watchdog", functions: ["CPU Supervision", "Timeout Detection", "System Recovery"] },
+  "Window Watchdog": { family: "watchdog", functions: ["CPU Supervision", "Windowed Timeout Detection", "System Recovery"] },
+  "CRC Engine": { family: "digital", functions: ["CRC Calculation", "Data Integrity Check", "Message Integrity Check"] },
+  "ECC Controller": { family: "memory", functions: ["Error Detection", "Error Correction", "Syndrome Calculation"] },
+  BIST: { family: "digital", functions: ["Built-In Self-Test", "Startup Test", "Periodic Test"] },
+  LBIST: { family: "digital", functions: ["Logic Built-In Self-Test", "Startup Test", "Periodic Test"] },
+  MBIST: { family: "memory", functions: ["Memory Built-In Self-Test", "Startup Test", "Periodic Test"] },
+  "Error Management Unit": { family: "digital", functions: ["Fault Collection", "Fault Signaling", "Fault Reaction"] },
+  GPIO: { family: "io", functions: ["Digital Input", "Digital Output", "Pin State Control"] },
+  "Input Buffer": { family: "io", functions: ["Digital Input", "Signal Conditioning", "Input Level Detection"] },
+  "Output Driver": { family: "io", functions: ["Digital Output", "Load Driving", "Pin State Control"] },
+  "Pad Control Logic": { family: "io", functions: ["Pad Configuration", "Pull Control", "Drive Strength Control"] },
+  "Interrupt Controller": { family: "io", functions: ["Interrupt Handling", "Priority Control", "Interrupt Routing"] },
+  Timer: { family: "timer", functions: ["Time Base Generation", "Timeout Detection", "Counter Operation"] },
+  "PWM Generator": { family: "timer", functions: ["PWM Generation", "Duty Cycle Control", "Period Control"] },
+  "Capture Unit": { family: "timer", functions: ["Signal Capture", "Timestamp Capture", "Edge Detection"] },
+  "Compare Unit": { family: "timer", functions: ["Compare Match", "Output Compare", "Timing Control"] },
+  "Real-Time Clock": { family: "timer", functions: ["Timekeeping", "Wakeup Timing", "Low-Power Timing"] },
+  "Sensor Front End": { family: "sensor", functions: ["Signal Conditioning", "Sensor Sampling", "Interface Monitoring"] },
+  "Resolver Interface": { family: "sensor", functions: ["Position Measurement", "Signal Demodulation", "Sensor Interface"] },
+  "Sigma Delta Interface": { family: "sensor", functions: ["Sensor Sampling", "Bitstream Filtering", "Signal Conversion"] },
+  "Hall Sensor Interface": { family: "sensor", functions: ["Position Sensing", "Speed Sensing", "Sensor Interface"] },
+};
 
 let projectName = "Untitled Fault Tree";
 let selectedNodeId = "top";
@@ -102,18 +230,37 @@ const summaryAnalysisEngine = document.querySelector("#summary-analysis-engine")
 const toggleRepeatedEventsViewButton = document.querySelector("#toggle-repeated-events-view");
 const resultsResizeHandle = document.querySelector("#results-resize-handle");
 const fmeaTableBody = document.querySelector("#fmea-table-body");
+const fmedaResultsTableBody = document.querySelector("#fmeda-results-table-body");
+const fmedaItemMetricsTableBody = document.querySelector("#fmeda-item-metrics-table-body");
+const fmedaSummaryValues = document.querySelectorAll("[data-fmeda-summary]");
 const addFmeaRowButton = document.querySelector("#add-fmea-row");
 const sortFmeaRowsButton = document.querySelector("#sort-fmea-rows");
 
 textArea.value = emptyTextModel;
 
 function createFmeaRow(overrides = {}) {
+  const legacyMetrics = inferLegacyFmedaMetrics(overrides);
+  const dangerous = normalizeBoolean(overrides.dangerous ?? overrides.safetyRelevant, legacyMetrics.dangerous);
+  const failureCategory = normalizeFailureCategory(
+    overrides.failureCategory || overrides.failureModeCategory || overrides.iec61508FailureCategory,
+    dangerous ? "dangerous" : "safe"
+  );
   return {
     id: overrides.id || generateFmeaRowId(),
+    component: overrides.component || overrides.block || overrides.part || "",
     itemFunction: overrides.itemFunction || "",
     failureMode: overrides.failureMode || "",
+    failureMechanism: overrides.failureMechanism || overrides.mechanism || "",
     effect: overrides.effect || "",
     cause: overrides.cause || "",
+    safetyMechanism: overrides.safetyMechanism || overrides.diagnostic || "",
+    faultTreeEventId: overrides.faultTreeEventId || overrides.basicEventId || overrides.eventId || "",
+    failureRateFit: inferFailureRateFit(overrides, legacyMetrics),
+    failureCategory,
+    dangerous,
+    diagnosticCoveragePercent: inferDiagnosticCoveragePercent(overrides, legacyMetrics, dangerous),
+    faultClassification: normalizeFaultClassification(overrides.faultClassification || overrides.faultType || "SPF"),
+    latent: normalizeBoolean(overrides.latent, false),
     severity: normalizeFmeaScore(overrides.severity, 1),
     occurrence: normalizeFmeaScore(overrides.occurrence, 1),
     detectability: normalizeFmeaScore(overrides.detectability ?? overrides.detection, 1),
@@ -135,8 +282,238 @@ function normalizeFmeaScore(value, fallback = 1) {
   return clamp(parsed, 1, 10);
 }
 
+function normalizeFmedaLambda(value, fallback = 0) {
+  const parsed = Number(String(value ?? "").trim());
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function normalizeFmedaPercent(value, fallback = 0) {
+  const parsed = Number(String(value ?? "").trim());
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return clamp(parsed, 0, 100);
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (["1", "true", "yes", "y"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "n"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
+function normalizeFaultClassification(value) {
+  const normalized = String(value || "SPF").trim().toUpperCase();
+  return ["SPF", "RF", "MPF"].includes(normalized) ? normalized : "SPF";
+}
+
+function normalizeFailureCategory(value, fallback = "dangerous") {
+  const normalized = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  const aliases = {
+    safe: "safe",
+    s: "safe",
+    dangerous: "dangerous",
+    d: "dangerous",
+    annunciation: "annunciation",
+    annunciated: "annunciation",
+    a: "annunciation",
+    no_effect: "no_effect",
+    noeffect: "no_effect",
+    ne: "no_effect",
+  };
+  return aliases[normalized] || fallback;
+}
+
+function readFmedaNumber(source, ...keys) {
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null && source[key] !== "") {
+      return normalizeFmedaLambda(source[key]);
+    }
+  }
+  return 0;
+}
+
+function inferLegacyFmedaMetrics(source = {}) {
+  const lambdaSD = readFmedaNumber(source, "lambdaSD", "lambdaSd", "lambda_sd");
+  const lambdaSU = readFmedaNumber(source, "lambdaSU", "lambdaSu", "lambda_su");
+  const lambdaDD = readFmedaNumber(source, "lambdaDD", "lambdaDd", "lambda_dd");
+  const lambdaDU = readFmedaNumber(source, "lambdaDU", "lambdaDu", "lambda_du");
+  const safeTotal = lambdaSD + lambdaSU;
+  const dangerousTotal = lambdaDD + lambdaDU;
+  return {
+    lambdaSD,
+    lambdaSU,
+    lambdaDD,
+    lambdaDU,
+    lambdaTotal: safeTotal + dangerousTotal,
+    dangerous: dangerousTotal >= safeTotal,
+  };
+}
+
+function inferFailureRateFit(source, legacyMetrics) {
+  const explicitFit = readFmedaNumber(source, "failureRateFit", "fit", "totalFit", "failureRate", "lambdaTotal");
+  return explicitFit > 0 ? explicitFit : legacyMetrics.lambdaTotal;
+}
+
+function inferDiagnosticCoveragePercent(source, legacyMetrics, dangerous) {
+  if (source.diagnosticCoveragePercent !== undefined || source.dcPercent !== undefined || source.dc !== undefined) {
+    return normalizeFmedaPercent(source.diagnosticCoveragePercent ?? source.dcPercent ?? source.dc);
+  }
+  if (source.diagnosticCoverage !== undefined && source.diagnosticCoverage !== null && source.diagnosticCoverage !== "") {
+    const parsed = Number(source.diagnosticCoverage);
+    return normalizeFmedaPercent(parsed <= 1 ? parsed * 100 : parsed);
+  }
+  const detected = dangerous ? legacyMetrics.lambdaDD : legacyMetrics.lambdaSD;
+  const undetected = dangerous ? legacyMetrics.lambdaDU : legacyMetrics.lambdaSU;
+  const total = detected + undetected;
+  return total > 0 ? normalizeFmedaPercent((detected / total) * 100) : 0;
+}
+
 function getFmeaRpn(row) {
   return normalizeFmeaScore(row.severity) * normalizeFmeaScore(row.occurrence) * normalizeFmeaScore(row.detectability);
+}
+
+function getFmedaMetrics(row) {
+  const lambdaTotal = normalizeFmedaLambda(row.failureRateFit);
+  const diagnosticCoverage = normalizeFmedaPercent(row.diagnosticCoveragePercent) / 100;
+  const failureCategory = normalizeFailureCategory(row.failureCategory, normalizeBoolean(row.dangerous, true) ? "dangerous" : "safe");
+  const dangerous = failureCategory === "dangerous";
+  const lambdaSD = failureCategory === "safe" ? lambdaTotal * diagnosticCoverage : 0;
+  const lambdaSU = failureCategory === "safe" ? lambdaTotal * (1 - diagnosticCoverage) : 0;
+  const lambdaDD = failureCategory === "dangerous" ? lambdaTotal * diagnosticCoverage : 0;
+  const lambdaDU = failureCategory === "dangerous" ? lambdaTotal * (1 - diagnosticCoverage) : 0;
+  const lambdaAnnunciation = failureCategory === "annunciation" ? lambdaTotal : 0;
+  const lambdaNoEffect = failureCategory === "no_effect" ? lambdaTotal : 0;
+  const lambdaSafe = lambdaSD + lambdaSU;
+  const lambdaDangerous = lambdaDD + lambdaDU;
+  const dangerousDiagnosticCoverage = lambdaDangerous > 0 ? lambdaDD / lambdaDangerous : 0;
+  const faultClassification = normalizeFaultClassification(row.faultClassification);
+  const latent = normalizeBoolean(row.latent, false);
+  const lambdaSPF = dangerous && faultClassification === "SPF" ? lambdaTotal : 0;
+  const lambdaRF = dangerous && faultClassification === "RF" ? lambdaTotal : 0;
+  const lambdaMPF = dangerous && faultClassification === "MPF" ? lambdaTotal : 0;
+  const lambdaLatentMPF = latent ? lambdaMPF : 0;
+  return {
+    lambdaSD,
+    lambdaSU,
+    lambdaDD,
+    lambdaDU,
+    lambdaAnnunciation,
+    lambdaNoEffect,
+    lambdaSPF,
+    lambdaRF,
+    lambdaMPF,
+    lambdaLatentMPF,
+    lambdaSafe,
+    lambdaDangerous,
+    lambdaTotal,
+    diagnosticCoverage: dangerousDiagnosticCoverage,
+    declaredDiagnosticCoverage: diagnosticCoverage,
+    faultClassification,
+    latent,
+    dangerous,
+    failureCategory,
+  };
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function getFmedaComponentOptions() {
+  return Object.keys(fmedaComponentLibrary).sort((left, right) => left.localeCompare(right));
+}
+
+function getFmedaLibraryEntry(component) {
+  return fmedaComponentLibrary[component] || null;
+}
+
+function getFmedaFamily(row) {
+  return getFmedaLibraryEntry(row.component)?.family || "digital";
+}
+
+function getFmedaFunctionOptions(row) {
+  const entry = getFmedaLibraryEntry(row.component);
+  if (entry) {
+    return entry.functions;
+  }
+  return uniqueValues(Object.values(fmedaComponentLibrary).flatMap((item) => item.functions)).sort((left, right) => left.localeCompare(right));
+}
+
+function getFmedaFailureModeOptions(row) {
+  return fmedaFailureModeLibrary[getFmedaFamily(row)] || fmedaFailureModeLibrary.digital;
+}
+
+function getFmedaSafetyMechanismOptions(row) {
+  return fmedaSafetyMechanismLibrary[getFmedaFamily(row)] || fmedaSafetyMechanismLibrary.digital;
+}
+
+function suggestFmedaDiagnosticCoveragePercent(row) {
+  const mechanism = String(row.safetyMechanism || "").trim().toLowerCase();
+  if (!mechanism) {
+    return 0;
+  }
+
+  const matchedDefault = fmedaDiagnosticCoverageDefaults.find((item) =>
+    item.patterns.some((pattern) => mechanism.includes(pattern))
+  );
+  if (matchedDefault) {
+    return matchedDefault.coverage;
+  }
+
+  return fmedaFamilyDiagnosticCoverageDefaults[getFmedaFamily(row)] || 0;
+}
+
+function suggestFmedaFaultClassification(row) {
+  const component = String(row.component || "").toLowerCase();
+  const mode = String(row.failureMode || "").toLowerCase();
+  const mechanism = String(row.safetyMechanism || "").toLowerCase();
+
+  if (row.latent || component.includes("sensor channel") || mechanism.includes("redundant")) {
+    return "MPF";
+  }
+  if (
+    mechanism.includes("ecc")
+    || mechanism.includes("parity")
+    || mechanism.includes("lockstep")
+    || mechanism.includes("lbist")
+    || mechanism.includes("mbist")
+    || mode.includes("single bit")
+  ) {
+    return "RF";
+  }
+  return "SPF";
+}
+
+function applyFmedaLibraryDefaults(row) {
+  const functions = getFmedaFunctionOptions(row);
+  const failureModes = getFmedaFailureModeOptions(row);
+  const safetyMechanisms = getFmedaSafetyMechanismOptions(row);
+
+  if (!functions.includes(row.itemFunction)) {
+    row.itemFunction = functions[0] || row.itemFunction;
+  }
+  if (!failureModes.includes(row.failureMode)) {
+    row.failureMode = failureModes[0] || row.failureMode;
+  }
+  if (!safetyMechanisms.includes(row.safetyMechanism)) {
+    row.safetyMechanism = safetyMechanisms[0] || row.safetyMechanism;
+  }
+  row.diagnosticCoveragePercent = suggestFmedaDiagnosticCoveragePercent(row);
+  row.faultClassification = suggestFmedaFaultClassification(row);
 }
 
 function setResultsPaneHeight(height) {
@@ -1226,13 +1603,13 @@ function setBuilderMode(mode) {
     mode === "textual"
       ? "Boolean Expression Builder"
       : mode === "fmea"
-        ? "FMEA Worksheet"
+        ? "FMEDA Worksheet"
         : "Graphical Fault Tree Builder";
   statusLine.textContent =
     mode === "textual"
       ? "Boolean expression builder ready."
       : mode === "fmea"
-        ? "FMEA worksheet ready."
+        ? "FMEDA worksheet ready."
         : "Graphical builder ready";
 }
 
@@ -1250,13 +1627,13 @@ function setDiagramView(view) {
       activeBuilderMode === "textual"
         ? "Boolean Expression Builder"
         : activeBuilderMode === "fmea"
-          ? "FMEA Worksheet"
+          ? "FMEDA Worksheet"
           : "Graphical Fault Tree Builder";
     statusLine.textContent =
       activeBuilderMode === "textual"
         ? "Boolean expression builder ready."
         : activeBuilderMode === "fmea"
-          ? "FMEA worksheet ready."
+          ? "FMEDA worksheet ready."
           : "Fault tree view ready.";
     return;
   }
@@ -1698,8 +2075,8 @@ function getExportFormatOptions(target) {
 
   if (target === "fmea") {
     return [
-      { value: "json", label: "FMEA JSON (.json)" },
-      { value: "csv", label: "FMEA CSV (.csv)" },
+      { value: "json", label: "FMEDA JSON (.json)" },
+      { value: "csv", label: "FMEDA CSV (.csv)" },
     ];
   }
 
@@ -2331,40 +2708,71 @@ async function exportJsonProject(filenameBase = safeFilename(projectName)) {
 async function exportFmeaWorksheetJson(filenameBase = safeFilename(projectName)) {
   const payload = buildFmeaExportPayload();
   await saveTextFile({
-    filename: `${filenameBase}-fmea.json`,
+    filename: `${filenameBase}-fmeda.json`,
     content: JSON.stringify(payload, null, 2),
     type: "application/json",
-    description: "FMEA JSON",
+    description: "FMEDA JSON",
     extension: ".json",
   });
   closeExportModal();
-  statusLine.textContent = "FMEA exported as JSON.";
+  statusLine.textContent = "FMEDA exported as JSON.";
 }
 
 async function exportFmeaWorksheetCsv(filenameBase = safeFilename(projectName)) {
-  const header = ["Item / Function", "Failure Mode", "Effect", "Cause", "Severity", "Occurrence", "Detectability", "RPN"];
+  const header = [
+    "Component Type",
+    "Function",
+    "Failure Mode",
+    "FIT",
+    "Effect",
+    "IEC 61508 Mode",
+    "Safety Mechanism",
+    "Diagnostic Coverage (%)",
+    "Fault Classification",
+    "Latent",
+    "Fault Tree Event",
+    "lambdaSD",
+    "lambdaSU",
+    "lambdaDD",
+    "lambdaDU",
+    "lambdaAnnunciation",
+    "lambdaNoEffect",
+    "Dangerous Diagnostic Coverage",
+    "Total FIT",
+  ];
   const rows = getFmeaRows().map((row) => [
+    row.component,
     row.itemFunction,
     row.failureMode,
+    row.failureRateFit,
     row.effect,
-    row.cause,
-    row.severity,
-    row.occurrence,
-    row.detectability,
-    getFmeaRpn(row),
+    normalizeFailureCategory(row.failureCategory, row.dangerous ? "dangerous" : "safe"),
+    row.safetyMechanism,
+    row.diagnosticCoveragePercent,
+    row.faultClassification,
+    row.latent ? "Yes" : "No",
+    row.faultTreeEventId,
+    getFmedaMetrics(row).lambdaSD,
+    getFmedaMetrics(row).lambdaSU,
+    getFmedaMetrics(row).lambdaDD,
+    getFmedaMetrics(row).lambdaDU,
+    getFmedaMetrics(row).lambdaAnnunciation,
+    getFmedaMetrics(row).lambdaNoEffect,
+    getFmedaMetrics(row).diagnosticCoverage,
+    getFmedaMetrics(row).lambdaTotal,
   ]);
   const csv = [header, ...rows]
     .map((cells) => cells.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(","))
     .join("\n");
   await saveTextFile({
-    filename: `${filenameBase}-fmea.csv`,
+    filename: `${filenameBase}-fmeda.csv`,
     content: csv,
     type: "text/csv",
-    description: "FMEA CSV",
+    description: "FMEDA CSV",
     extension: ".csv",
   });
   closeExportModal();
-  statusLine.textContent = "FMEA exported as CSV.";
+  statusLine.textContent = "FMEDA exported as CSV.";
 }
 
 async function exportSbeProject(filenameBase = safeFilename(projectName)) {
@@ -3141,40 +3549,61 @@ function modelToProjectJson() {
       return payload;
     }),
     edges: buildEdges(),
-    fmea: getFmeaRows().map((row) => ({
-      id: row.id,
-      itemFunction: row.itemFunction,
-      failureMode: row.failureMode,
-      effect: row.effect,
-      cause: row.cause,
-      severity: row.severity,
-      occurrence: row.occurrence,
-      detectability: row.detectability,
-      rpn: getFmeaRpn(row),
-    })),
+    fmedaProfile: "semiconductor-exida",
+    fmea: getFmeaRows().map((row) => serializeFmedaRow(row)),
   };
 }
 
 function buildFmeaExportPayload() {
   return {
     schemaVersion: "0.1.0",
+    fmedaProfile: "semiconductor-exida",
     project: {
       id: safeFilename(projectName),
       name: projectName,
       description: "",
       createdBy: "FAUTree",
     },
-    fmea: getFmeaRows().map((row) => ({
-      id: row.id,
-      itemFunction: row.itemFunction,
-      failureMode: row.failureMode,
-      effect: row.effect,
-      cause: row.cause,
-      severity: row.severity,
-      occurrence: row.occurrence,
-      detectability: row.detectability,
-      rpn: getFmeaRpn(row),
-    })),
+    fmeda: getFmeaRows().map((row) => serializeFmedaRow(row)),
+  };
+}
+
+function serializeFmedaRow(row) {
+  const metrics = getFmedaMetrics(row);
+  return {
+    id: row.id,
+    component: row.component,
+    itemFunction: row.itemFunction,
+    failureMode: row.failureMode,
+    failureMechanism: row.failureMechanism,
+    effect: row.effect,
+    cause: row.cause,
+    safetyMechanism: row.safetyMechanism,
+    faultTreeEventId: row.faultTreeEventId,
+    failureRateFit: metrics.lambdaTotal,
+    failureCategory: metrics.failureCategory,
+    dangerous: metrics.dangerous,
+    diagnosticCoveragePercent: normalizeFmedaPercent(row.diagnosticCoveragePercent),
+    faultClassification: metrics.faultClassification,
+    latent: metrics.latent,
+    lambdaSD: metrics.lambdaSD,
+    lambdaSU: metrics.lambdaSU,
+    lambdaDD: metrics.lambdaDD,
+    lambdaDU: metrics.lambdaDU,
+    lambdaAnnunciation: metrics.lambdaAnnunciation,
+    lambdaNoEffect: metrics.lambdaNoEffect,
+    lambdaSPF: metrics.lambdaSPF,
+    lambdaRF: metrics.lambdaRF,
+    lambdaMPF: metrics.lambdaMPF,
+    lambdaLatentMPF: metrics.lambdaLatentMPF,
+    lambdaSafe: metrics.lambdaSafe,
+    lambdaDangerous: metrics.lambdaDangerous,
+    lambdaTotal: metrics.lambdaTotal,
+    diagnosticCoverage: metrics.diagnosticCoverage,
+    severity: row.severity,
+    occurrence: row.occurrence,
+    detectability: row.detectability,
+    rpn: getFmeaRpn(row),
   };
 }
 
@@ -3209,11 +3638,11 @@ function importProjectFile(file) {
       const trimmed = content.trim();
       if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
         const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed) || Array.isArray(parsed.rows) || Array.isArray(parsed.fmea) || (!parsed.nodes && !parsed.edges)) {
+        if (Array.isArray(parsed) || Array.isArray(parsed.rows) || Array.isArray(parsed.fmea) || Array.isArray(parsed.fmeda) || (!parsed.nodes && !parsed.edges)) {
           const importedRows = parseImportedFmeaContent(trimmed);
           if (importedRows.length > 0) {
             applyImportedFmeaRows(importedRows);
-            statusLine.textContent = `Imported ${importedRows.length} FMEA row${importedRows.length === 1 ? "" : "s"}.`;
+            statusLine.textContent = `Imported ${importedRows.length} FMEDA row${importedRows.length === 1 ? "" : "s"}.`;
             return;
           }
         }
@@ -3226,7 +3655,7 @@ function importProjectFile(file) {
       const importedRows = parseImportedFmeaContent(content);
       if (importedRows.length > 0) {
         applyImportedFmeaRows(importedRows);
-        statusLine.textContent = `Imported ${importedRows.length} FMEA row${importedRows.length === 1 ? "" : "s"}.`;
+        statusLine.textContent = `Imported ${importedRows.length} FMEDA row${importedRows.length === 1 ? "" : "s"}.`;
         return;
       }
 
@@ -3255,6 +3684,9 @@ function parseImportedFmeaContent(content) {
 
   if (trimmed.startsWith("{")) {
     const payload = JSON.parse(trimmed);
+    if (Array.isArray(payload.fmeda)) {
+      return payload.fmeda.map((row, index) => createFmeaRow({ ...row, id: row.id || `fmea-row-${index + 1}` }));
+    }
     if (Array.isArray(payload.fmea)) {
       return payload.fmea.map((row, index) => createFmeaRow({ ...row, id: row.id || `fmea-row-${index + 1}` }));
     }
@@ -3278,19 +3710,63 @@ function parseFmeaCsv(content) {
 
   const headers = splitCsvLine(lines[0]).map((header) => normalizeFmeaHeader(header));
   const indexByHeader = new Map(headers.map((header, index) => [header, index]));
-  const hasRecognizedHeader = ["itemfunction", "failuremode", "effect", "cause", "severity", "occurrence", "detectability"].some((header) => indexByHeader.has(header));
+  const hasRecognizedHeader = [
+    "component",
+    "block",
+    "itemfunction",
+    "function",
+    "failuremode",
+    "effect",
+    "cause",
+    "severity",
+    "occurrence",
+    "detectability",
+    "fit",
+    "failureratefit",
+    "failurecategory",
+    "iec61508mode",
+    "iec61508failurecategory",
+    "dangerous",
+    "diagnosticcoverage",
+    "diagnosticcoveragepercent",
+    "faultclassification",
+    "faulttype",
+    "latent",
+    "lambdasd",
+    "lambdasu",
+    "lambdadd",
+    "lambdadu",
+    "sd",
+    "su",
+    "dd",
+    "du",
+  ].some((header) => indexByHeader.has(header));
   if (!hasRecognizedHeader) {
-    throw new Error("Unsupported FMEA CSV format.");
+    throw new Error("Unsupported FMEDA CSV format.");
   }
 
   return lines.slice(1).map((line, index) => {
     const cells = splitCsvLine(line);
     return createFmeaRow({
       id: `fmea-row-${index + 1}`,
-      itemFunction: readCsvCell(cells, indexByHeader, "itemfunction", "item"),
+      component: readCsvCell(cells, indexByHeader, "component", "block", "part", "componentblock"),
+      itemFunction: readCsvCell(cells, indexByHeader, "itemfunction", "item", "function"),
       failureMode: readCsvCell(cells, indexByHeader, "failuremode"),
+      failureMechanism: readCsvCell(cells, indexByHeader, "failuremechanism", "mechanism"),
       effect: readCsvCell(cells, indexByHeader, "effect"),
       cause: readCsvCell(cells, indexByHeader, "cause"),
+      safetyMechanism: readCsvCell(cells, indexByHeader, "safetymechanism", "diagnostic", "diagnosticmechanism"),
+      faultTreeEventId: readCsvCell(cells, indexByHeader, "faulttreeevent", "faulttreeeventid", "basiceventid", "eventid"),
+      failureRateFit: readCsvCell(cells, indexByHeader, "fit", "failureratefit", "failure rate fit", "failurerate"),
+      failureCategory: readCsvCell(cells, indexByHeader, "failurecategory", "iec61508mode", "iec61508failurecategory", "iec mode"),
+      dangerous: readCsvCell(cells, indexByHeader, "dangerous", "safetyrelevant"),
+      diagnosticCoveragePercent: readCsvCell(cells, indexByHeader, "diagnosticcoveragepercent", "diagnosticcoverage", "dcpercent", "dc"),
+      faultClassification: readCsvCell(cells, indexByHeader, "faultclassification", "faulttype", "classification"),
+      latent: readCsvCell(cells, indexByHeader, "latent"),
+      lambdaSD: readCsvCell(cells, indexByHeader, "lambdasd", "lambda sd", "sd"),
+      lambdaSU: readCsvCell(cells, indexByHeader, "lambdasu", "lambda su", "su"),
+      lambdaDD: readCsvCell(cells, indexByHeader, "lambdadd", "lambda dd", "dd"),
+      lambdaDU: readCsvCell(cells, indexByHeader, "lambdadu", "lambda du", "du"),
       severity: readCsvCell(cells, indexByHeader, "severity"),
       occurrence: readCsvCell(cells, indexByHeader, "occurrence"),
       detectability: readCsvCell(cells, indexByHeader, "detectability", "detection"),
@@ -3533,10 +4009,11 @@ function loadProjectFromJson(project) {
 
   pushUndoSnapshot();
   projectName = project.project?.name || "Imported Fault Tree";
+  const importedFmedaRows = Array.isArray(project.fmeda) ? project.fmeda : project.fmea;
   model = {
     rootId: topNodes[0].id,
     nodes: importedNodes,
-    fmeaRows: Array.isArray(project.fmea) ? project.fmea.map((row) => createFmeaRow(row)) : [],
+    fmeaRows: Array.isArray(importedFmedaRows) ? importedFmedaRows.map((row) => createFmeaRow(row)) : [],
   };
   selectedNodeId = model.rootId;
   updateNodeSequence();
@@ -4317,10 +4794,13 @@ function renderFmeaTable() {
 
   const rows = getFmeaRows();
   fmeaTableBody.innerHTML = "";
+  updateFmedaSummary();
+  renderFmedaResultsTable(rows);
+  renderFmedaItemMetricsTable(rows);
 
   if (rows.length === 0) {
     const emptyRow = document.createElement("tr");
-    emptyRow.innerHTML = '<td colspan="9">Add your first FMEA row to begin.</td>';
+    emptyRow.innerHTML = '<td colspan="12">Add your first FMEDA row to begin.</td>';
     fmeaTableBody.appendChild(emptyRow);
     return;
   }
@@ -4329,41 +4809,66 @@ function renderFmeaTable() {
     const tr = document.createElement("tr");
     tr.dataset.rowId = row.id;
 
+    const componentCell = document.createElement("td");
+    componentCell.appendChild(
+      createFmedaSuggestionInput(row, "component", "Component Type", getFmedaComponentOptions(), () => {
+        applyFmedaLibraryDefaults(row);
+        renderFmeaTable();
+      })
+    );
+    tr.appendChild(componentCell);
+
     const itemCell = document.createElement("td");
-    itemCell.appendChild(createFmeaInput(row, "itemFunction", "Item / Function"));
+    itemCell.appendChild(createFmedaSuggestionInput(row, "itemFunction", "Function", getFmedaFunctionOptions(row)));
     tr.appendChild(itemCell);
 
     const failureCell = document.createElement("td");
-    failureCell.appendChild(createFmeaInput(row, "failureMode", "Failure Mode"));
+    failureCell.appendChild(
+      createFmedaSuggestionInput(row, "failureMode", "Failure Mode", getFmedaFailureModeOptions(row), () => {
+        row.faultClassification = suggestFmedaFaultClassification(row);
+        renderFmeaTable();
+      })
+    );
     tr.appendChild(failureCell);
+
+    const fitCell = document.createElement("td");
+    fitCell.appendChild(createFmedaFitInput(row));
+    tr.appendChild(fitCell);
 
     const effectCell = document.createElement("td");
     effectCell.appendChild(createFmeaInput(row, "effect", "Effect"));
     tr.appendChild(effectCell);
 
-    const causeCell = document.createElement("td");
-    causeCell.appendChild(createFmeaInput(row, "cause", "Cause"));
-    tr.appendChild(causeCell);
+    const failureCategoryCell = document.createElement("td");
+    failureCategoryCell.appendChild(createFmedaFailureCategorySelect(row));
+    tr.appendChild(failureCategoryCell);
 
-    const severityCell = document.createElement("td");
-    severityCell.appendChild(createFmeaNumberInput(row, "severity"));
-    tr.appendChild(severityCell);
+    const safetyMechanismCell = document.createElement("td");
+    safetyMechanismCell.appendChild(
+      createFmedaSuggestionInput(row, "safetyMechanism", "Safety Mechanism", getFmedaSafetyMechanismOptions(row), () => {
+        row.diagnosticCoveragePercent = suggestFmedaDiagnosticCoveragePercent(row);
+        row.faultClassification = suggestFmedaFaultClassification(row);
+        renderFmeaTable();
+      })
+    );
+    tr.appendChild(safetyMechanismCell);
 
-    const occurrenceCell = document.createElement("td");
-    occurrenceCell.appendChild(createFmeaNumberInput(row, "occurrence"));
-    tr.appendChild(occurrenceCell);
+    const diagnosticCoverageCell = document.createElement("td");
+    diagnosticCoverageCell.appendChild(createFmedaDiagnosticCoverageInput(row));
+    tr.appendChild(diagnosticCoverageCell);
 
-    const detectabilityCell = document.createElement("td");
-    detectabilityCell.appendChild(createFmeaNumberInput(row, "detectability"));
-    tr.appendChild(detectabilityCell);
+    const classificationCell = document.createElement("td");
+    classificationCell.appendChild(createFmedaClassificationSelect(row));
+    tr.appendChild(classificationCell);
 
-    const rpnCell = document.createElement("td");
-    const rpnValue = document.createElement("span");
-    rpnValue.className = "fmea-rpn";
-    rpnValue.dataset.fmeaRpnFor = row.id;
-    rpnValue.textContent = String(getFmeaRpn(row));
-    rpnCell.appendChild(rpnValue);
-    tr.appendChild(rpnCell);
+    const latentCell = document.createElement("td");
+    latentCell.className = "fmeda-checkbox-cell";
+    latentCell.appendChild(createFmedaLatentCheckbox(row));
+    tr.appendChild(latentCell);
+
+    const eventCell = document.createElement("td");
+    eventCell.appendChild(createFmeaInput(row, "faultTreeEventId", "Basic event id"));
+    tr.appendChild(eventCell);
 
     const actionsCell = document.createElement("td");
     actionsCell.className = "fmea-actions";
@@ -4379,6 +4884,194 @@ function renderFmeaTable() {
   });
 }
 
+function renderFmedaResultsTable(rows) {
+  if (!fmedaResultsTableBody) {
+    return;
+  }
+
+  fmedaResultsTableBody.innerHTML = "";
+  if (rows.length === 0) {
+    const emptyRow = document.createElement("tr");
+    emptyRow.innerHTML = '<td colspan="15">Generated lambda results will appear here.</td>';
+    fmedaResultsTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.dataset.resultRowId = row.id;
+
+    const componentCell = document.createElement("td");
+    componentCell.dataset.fmedaResultComponentFor = row.id;
+    componentCell.textContent = row.component || "-";
+    tr.appendChild(componentCell);
+
+    const failureModeCell = document.createElement("td");
+    failureModeCell.dataset.fmedaResultFailureModeFor = row.id;
+    failureModeCell.textContent = row.failureMode || "-";
+    tr.appendChild(failureModeCell);
+
+    ["lambdaSD", "lambdaSU", "lambdaDD", "lambdaDU", "lambdaAnnunciation", "lambdaNoEffect", "lambdaTotal"].forEach((metricKey) => {
+      const cell = document.createElement("td");
+      const value = document.createElement("span");
+      value.className = "fmea-rpn";
+      value.dataset.fmedaMetricFor = row.id;
+      value.dataset.fmedaMetricKey = metricKey;
+      cell.appendChild(value);
+      tr.appendChild(cell);
+    });
+
+    const diagnosticCoverageCell = document.createElement("td");
+    const diagnosticCoverageValue = document.createElement("span");
+    diagnosticCoverageValue.className = "fmea-rpn";
+    diagnosticCoverageValue.dataset.fmedaMetricFor = row.id;
+    diagnosticCoverageValue.dataset.fmedaMetricKey = "diagnosticCoverage";
+    diagnosticCoverageCell.appendChild(diagnosticCoverageValue);
+    tr.appendChild(diagnosticCoverageCell);
+
+    ["SPF", "RF", "MPF"].forEach((classification) => {
+      const cell = document.createElement("td");
+      cell.className = "fmeda-classification-mark";
+      cell.dataset.fmedaClassificationFor = row.id;
+      cell.dataset.fmedaClassification = classification;
+      tr.appendChild(cell);
+    });
+
+    const latentCell = document.createElement("td");
+    latentCell.className = "fmeda-classification-mark";
+    latentCell.dataset.fmedaLatentFor = row.id;
+    tr.appendChild(latentCell);
+
+    const eventCell = document.createElement("td");
+    eventCell.dataset.fmedaResultEventFor = row.id;
+    eventCell.textContent = row.faultTreeEventId || "-";
+    tr.appendChild(eventCell);
+
+    fmedaResultsTableBody.appendChild(tr);
+    updateFmedaMetricCells(row.id);
+  });
+}
+
+function renderFmedaItemMetricsTable(rows) {
+  if (!fmedaItemMetricsTableBody) {
+    return;
+  }
+
+  fmedaItemMetricsTableBody.innerHTML = "";
+  const items = getFmedaItemMetricSummaries(rows);
+  if (items.length === 0) {
+    const emptyRow = document.createElement("tr");
+    emptyRow.innerHTML = '<td colspan="10">Item-level metrics will appear after FMEDA rows are added.</td>';
+    fmedaItemMetricsTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  items.forEach((item) => {
+    const tr = document.createElement("tr");
+    [
+      item.component,
+      String(item.rowCount),
+      formatNumber(item.lambdaTotal),
+      formatNumber(item.lambdaSPF),
+      formatNumber(item.lambdaRF),
+      formatNumber(item.lambdaMPF),
+      item.spfm === null ? "N/A" : formatPercent(item.spfm),
+      item.lfm === null ? "N/A" : formatPercent(item.lfm),
+      formatNumber(item.pmhf),
+      item.sff === null ? "N/A" : formatPercent(item.sff),
+    ].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      tr.appendChild(cell);
+    });
+    fmedaItemMetricsTableBody.appendChild(tr);
+  });
+}
+
+function getFmedaItemMetricSummaries(rows) {
+  const byComponent = new Map();
+  rows.forEach((row) => {
+    const component = row.component || "Unassigned component";
+    if (!byComponent.has(component)) {
+      byComponent.set(component, {
+        component,
+        rowCount: 0,
+        lambdaTotal: 0,
+        lambdaSafe: 0,
+        lambdaDangerous: 0,
+        lambdaDD: 0,
+        lambdaDU: 0,
+        lambdaSPF: 0,
+        lambdaRF: 0,
+        lambdaMPF: 0,
+        lambdaLatentMPF: 0,
+      });
+    }
+    const item = byComponent.get(component);
+    const metrics = getFmedaMetrics(row);
+    item.rowCount += 1;
+    item.lambdaTotal += metrics.lambdaTotal;
+    item.lambdaSafe += metrics.lambdaSafe;
+    item.lambdaDangerous += metrics.lambdaDangerous;
+    item.lambdaDD += metrics.lambdaDD;
+    item.lambdaDU += metrics.lambdaDU;
+    item.lambdaSPF += metrics.lambdaSPF;
+    item.lambdaRF += metrics.lambdaRF;
+    item.lambdaMPF += metrics.lambdaMPF;
+    item.lambdaLatentMPF += metrics.lambdaLatentMPF;
+  });
+
+  return [...byComponent.values()].map((item) => {
+    const safetyRelated = item.lambdaSafe + item.lambdaDangerous;
+    return {
+      ...item,
+      spfm: item.lambdaTotal > 0 ? 1 - ((item.lambdaSPF + item.lambdaRF) / item.lambdaTotal) : null,
+      lfm: item.lambdaMPF > 0 && item.lambdaLatentMPF > 0 ? 1 - (item.lambdaLatentMPF / item.lambdaMPF) : null,
+      pmhf: item.lambdaDU,
+      sff: safetyRelated > 0 ? (item.lambdaSafe + item.lambdaDD) / safetyRelated : null,
+    };
+  });
+}
+
+function createFmedaSuggestionInput(row, field, placeholder, options, onChange = null) {
+  const fragment = document.createDocumentFragment();
+  const input = document.createElement("input");
+  const datalist = document.createElement("datalist");
+  const listId = `${row.id}-${field}-options`.replace(/[^A-Za-z0-9_-]/g, "-");
+
+  input.type = "text";
+  input.className = "fmea-field fmeda-library-field";
+  input.value = row[field] || "";
+  input.placeholder = placeholder;
+  input.setAttribute("list", listId);
+  datalist.id = listId;
+
+  uniqueValues(options).forEach((optionValue) => {
+    const option = document.createElement("option");
+    option.value = optionValue;
+    datalist.appendChild(option);
+  });
+
+  input.addEventListener("input", () => {
+    row[field] = input.value;
+    if (["component", "failureMode", "faultTreeEventId"].includes(field)) {
+      updateFmedaResultLabels(row.id);
+    }
+  });
+  input.addEventListener("change", () => {
+    row[field] = input.value;
+    if (onChange) {
+      onChange();
+      return;
+    }
+    updateFmedaResultLabels(row.id);
+  });
+
+  fragment.appendChild(input);
+  fragment.appendChild(datalist);
+  return fragment;
+}
+
 function createFmeaInput(row, field, placeholder) {
   const input = document.createElement("input");
   input.type = "text";
@@ -4387,6 +5080,9 @@ function createFmeaInput(row, field, placeholder) {
   input.placeholder = placeholder;
   input.addEventListener("input", () => {
     row[field] = input.value;
+    if (["component", "failureMode", "faultTreeEventId"].includes(field)) {
+      updateFmedaResultLabels(row.id);
+    }
   });
   return input;
 }
@@ -4407,6 +5103,109 @@ function createFmeaNumberInput(row, field) {
   return input;
 }
 
+function createFmedaFitInput(row) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "fmea-field fmeda-lambda";
+  input.min = "0";
+  input.step = "0.001";
+  input.value = String(normalizeFmedaLambda(row.failureRateFit));
+  input.addEventListener("input", () => {
+    row.failureRateFit = normalizeFmedaLambda(input.value, row.failureRateFit || 0);
+    input.value = String(row.failureRateFit);
+    updateFmedaDerivedViews(row.id);
+  });
+  return input;
+}
+
+function createFmedaDiagnosticCoverageInput(row) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "fmea-field fmeda-percent";
+  input.min = "0";
+  input.max = "100";
+  input.step = "0.1";
+  input.value = String(normalizeFmedaPercent(row.diagnosticCoveragePercent));
+  input.addEventListener("input", () => {
+    row.diagnosticCoveragePercent = normalizeFmedaPercent(input.value, row.diagnosticCoveragePercent || 0);
+    input.value = String(row.diagnosticCoveragePercent);
+    updateFmedaDerivedViews(row.id);
+  });
+  return input;
+}
+
+function createFmedaBooleanSelect(row, field) {
+  const select = document.createElement("select");
+  select.className = "fmea-field fmeda-select";
+  [
+    { value: "true", label: "Yes" },
+    { value: "false", label: "No" },
+  ].forEach((optionConfig) => {
+    const option = document.createElement("option");
+    option.value = optionConfig.value;
+    option.textContent = optionConfig.label;
+    select.appendChild(option);
+  });
+  select.value = normalizeBoolean(row[field], true) ? "true" : "false";
+  select.addEventListener("change", () => {
+    row[field] = select.value === "true";
+    updateFmedaDerivedViews(row.id);
+  });
+  return select;
+}
+
+function createFmedaFailureCategorySelect(row) {
+  const select = document.createElement("select");
+  select.className = "fmea-field fmeda-select fmeda-category-select";
+  [
+    { value: "dangerous", label: "Dangerous" },
+    { value: "safe", label: "Safe" },
+    { value: "annunciation", label: "Annunciation" },
+    { value: "no_effect", label: "No Effect" },
+  ].forEach((optionConfig) => {
+    const option = document.createElement("option");
+    option.value = optionConfig.value;
+    option.textContent = optionConfig.label;
+    select.appendChild(option);
+  });
+  select.value = normalizeFailureCategory(row.failureCategory, row.dangerous ? "dangerous" : "safe");
+  select.addEventListener("change", () => {
+    row.failureCategory = normalizeFailureCategory(select.value);
+    row.dangerous = row.failureCategory === "dangerous";
+    updateFmedaDerivedViews(row.id);
+  });
+  return select;
+}
+
+function createFmedaClassificationSelect(row) {
+  const select = document.createElement("select");
+  select.className = "fmea-field fmeda-select";
+  ["SPF", "RF", "MPF"].forEach((classification) => {
+    const option = document.createElement("option");
+    option.value = classification;
+    option.textContent = classification;
+    select.appendChild(option);
+  });
+  select.value = normalizeFaultClassification(row.faultClassification);
+  select.addEventListener("change", () => {
+    row.faultClassification = normalizeFaultClassification(select.value);
+    updateFmedaDerivedViews(row.id);
+  });
+  return select;
+}
+
+function createFmedaLatentCheckbox(row) {
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.className = "fmeda-checkbox";
+  input.checked = normalizeBoolean(row.latent, false);
+  input.addEventListener("change", () => {
+    row.latent = input.checked;
+    updateFmedaDerivedViews(row.id);
+  });
+  return input;
+}
+
 function updateFmeaRpnCell(rowId) {
   const row = getFmeaRows().find((item) => item.id === rowId);
   const rpnCell = document.querySelector(`[data-fmea-rpn-for="${rowId}"]`);
@@ -4415,32 +5214,154 @@ function updateFmeaRpnCell(rowId) {
   }
 }
 
+function updateFmedaDerivedViews(rowId) {
+  updateFmedaMetricCells(rowId);
+  updateFmedaSummary();
+  renderFmedaItemMetricsTable(getFmeaRows());
+}
+
+function updateFmedaMetricCells(rowId) {
+  const row = getFmeaRows().find((item) => item.id === rowId);
+  if (!row) {
+    return;
+  }
+  const metrics = getFmedaMetrics(row);
+  document.querySelectorAll(`[data-fmeda-metric-for="${rowId}"]`).forEach((cell) => {
+    const key = cell.dataset.fmedaMetricKey;
+    if (key === "diagnosticCoverage") {
+      cell.textContent = metrics.lambdaDangerous > 0 ? formatPercent(metrics.diagnosticCoverage) : "N/A";
+      return;
+    }
+    if (key === "lambdaAnnunciation" && metrics.failureCategory !== "annunciation") {
+      cell.textContent = "Not classified";
+      return;
+    }
+    if (key === "lambdaNoEffect" && metrics.failureCategory !== "no_effect") {
+      cell.textContent = "Not classified";
+      return;
+    }
+    cell.textContent = formatNumber(metrics[key] ?? 0);
+  });
+  document.querySelectorAll(`[data-fmeda-classification-for="${rowId}"]`).forEach((cell) => {
+    cell.textContent = cell.dataset.fmedaClassification === metrics.faultClassification ? "x" : "";
+  });
+  const latentCell = document.querySelector(`[data-fmeda-latent-for="${rowId}"]`);
+  if (latentCell) {
+    latentCell.textContent = metrics.latent ? "x" : "";
+  }
+}
+
+function updateFmedaResultLabels(rowId) {
+  const row = getFmeaRows().find((item) => item.id === rowId);
+  if (!row) {
+    return;
+  }
+  const componentCell = document.querySelector(`[data-fmeda-result-component-for="${rowId}"]`);
+  const failureModeCell = document.querySelector(`[data-fmeda-result-failure-mode-for="${rowId}"]`);
+  const eventCell = document.querySelector(`[data-fmeda-result-event-for="${rowId}"]`);
+  if (componentCell) {
+    componentCell.textContent = row.component || "-";
+  }
+  if (failureModeCell) {
+    failureModeCell.textContent = row.failureMode || "-";
+  }
+  if (eventCell) {
+    eventCell.textContent = row.faultTreeEventId || "-";
+  }
+}
+
+function updateFmedaSummary() {
+  if (!fmedaSummaryValues.length) {
+    return;
+  }
+  const summary = getFmeaRows().reduce(
+    (totals, row) => {
+      const metrics = getFmedaMetrics(row);
+      totals.lambdaSD += metrics.lambdaSD;
+      totals.lambdaSU += metrics.lambdaSU;
+      totals.lambdaDD += metrics.lambdaDD;
+      totals.lambdaDU += metrics.lambdaDU;
+      totals.lambdaAnnunciation += metrics.lambdaAnnunciation;
+      totals.lambdaNoEffect += metrics.lambdaNoEffect;
+      totals.lambdaTotal += metrics.lambdaTotal;
+      totals.lambdaSPF += metrics.lambdaSPF;
+      totals.lambdaRF += metrics.lambdaRF;
+      totals.lambdaMPF += metrics.lambdaMPF;
+      totals.lambdaLatentMPF += metrics.lambdaLatentMPF;
+      return totals;
+    },
+    {
+      lambdaSD: 0,
+      lambdaSU: 0,
+      lambdaDD: 0,
+      lambdaDU: 0,
+      lambdaAnnunciation: 0,
+      lambdaNoEffect: 0,
+      lambdaTotal: 0,
+      lambdaSPF: 0,
+      lambdaRF: 0,
+      lambdaMPF: 0,
+      lambdaLatentMPF: 0,
+    }
+  );
+  const dangerous = summary.lambdaDD + summary.lambdaDU;
+  const safetyRelated = summary.lambdaSD + summary.lambdaSU + summary.lambdaDD + summary.lambdaDU;
+  summary.dangerousDiagnosticCoverage = dangerous > 0 ? summary.lambdaDD / dangerous : null;
+  summary.spfm = "Item level";
+  summary.lfm = "Item level";
+  summary.pmhf = summary.lambdaDU;
+  summary.sff = "Item level";
+
+  fmedaSummaryValues.forEach((value) => {
+    const key = value.dataset.fmedaSummary;
+    if (["spfm", "lfm", "sff"].includes(key)) {
+      value.textContent = "Item level";
+      return;
+    }
+    if (key === "pmhf") {
+      value.textContent = "Item level";
+      return;
+    }
+    if (key === "dangerousDiagnosticCoverage") {
+      value.textContent = summary[key] === null ? "N/A" : formatPercent(summary[key]);
+      return;
+    }
+    if ((key === "lambdaAnnunciation" || key === "lambdaNoEffect") && (summary[key] ?? 0) <= 0) {
+      value.textContent = "Not classified";
+      return;
+    }
+    value.textContent = formatNumber(summary[key] ?? 0);
+  });
+}
+
 function addFmeaRow() {
   pushUndoSnapshot();
   getFmeaRows().push(createFmeaRow());
   renderFmeaTable();
-  statusLine.textContent = "FMEA row added.";
+  statusLine.textContent = "FMEDA row added.";
 }
 
 function deleteFmeaRow(rowId) {
   pushUndoSnapshot();
   model.fmeaRows = getFmeaRows().filter((row) => row.id !== rowId);
   renderFmeaTable();
-  statusLine.textContent = "FMEA row deleted.";
+  statusLine.textContent = "FMEDA row deleted.";
 }
 
 function sortFmeaRowsByRpn() {
   pushUndoSnapshot();
   model.fmeaRows = [...getFmeaRows()].sort((left, right) => {
-    const rightScore = getFmeaRpn(right);
-    const leftScore = getFmeaRpn(left);
+    const rightMetrics = getFmedaMetrics(right);
+    const leftMetrics = getFmedaMetrics(left);
+    const rightScore = rightMetrics.lambdaDU || rightMetrics.lambdaDangerous || rightMetrics.lambdaTotal;
+    const leftScore = leftMetrics.lambdaDU || leftMetrics.lambdaDangerous || leftMetrics.lambdaTotal;
     if (rightScore !== leftScore) {
       return rightScore - leftScore;
     }
-    return String(left.itemFunction || left.failureMode || left.id).localeCompare(String(right.itemFunction || right.failureMode || right.id));
+    return String(left.component || left.itemFunction || left.failureMode || left.id).localeCompare(String(right.component || right.itemFunction || right.failureMode || right.id));
   });
   renderFmeaTable();
-  statusLine.textContent = "FMEA rows sorted by RPN.";
+  statusLine.textContent = "FMEDA rows sorted by lambdaDU.";
 }
 
 function findDominantCutSet(cutSets) {
@@ -4664,6 +5585,13 @@ function formatNumber(value) {
     return value.toExponential(2);
   }
   return value.toPrecision(4);
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "0%";
+  }
+  return `${formatNumber(value * 100)}%`;
 }
 
 function escapeHtml(value) {

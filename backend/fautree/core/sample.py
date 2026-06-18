@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .model import (
     AnalysisSettings,
+    FmeaRow,
     FaultTreeEdge,
     FaultTreeNode,
     FaultTreeProject,
@@ -37,5 +38,22 @@ def build_sample_project() -> FaultTreeProject:
             FaultTreeEdge("g1", "e4"),
             FaultTreeEdge("g2", "e2"),
             FaultTreeEdge("g2", "e3"),
+        ],
+        fmea=[
+            FmeaRow(
+                id="fmeda-row-1",
+                component="Power management IC",
+                item_function="Generate regulated supply",
+                failure_mode="Output stuck low",
+                failure_mechanism="Internal regulator open",
+                effect="Loss of system power",
+                safety_mechanism="Voltage monitor diagnostic",
+                fault_tree_event_id="e1",
+                failure_rate_fit=1.5,
+                dangerous=True,
+                diagnostic_coverage_percent=80.0,
+                fault_classification="SPF",
+                latent=False,
+            )
         ],
     )

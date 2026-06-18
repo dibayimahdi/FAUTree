@@ -29,6 +29,16 @@
 - Add exact probability through BDD evaluation.
 - Add result tables and sensitivity views.
 
+## Phase 4A: Semiconductor FMEDA
+
+- Promote the FMEA worksheet into an FMEDA workflow.
+- Capture engineer-entered FIT, IEC 61508 category, diagnostic coverage, SPF/RF/MPF, latent flag, and fault tree event link.
+- Add a semiconductor component/function/failure-mode/safety-mechanism library for common MCU, SoC, PMIC, sensor, and communication IC blocks.
+- Derive exida-style lambda buckets: lambdaSD, lambdaSU, lambdaDD, lambdaDU, lambdaAnnunciation, and lambdaNoEffect.
+- Compute row-level safe, dangerous, annunciation, no-effect, total FIT, and dangerous diagnostic coverage results.
+- Compute SPFM, LFM, PMHF, and SFF only after aggregating rows at item/component level.
+- Link FMEDA rows to fault tree basic events for traceable semiconductor safety analysis.
+
 ## Phase 5: BDD Conversion
 
 - Convert fault trees into Boolean expressions.

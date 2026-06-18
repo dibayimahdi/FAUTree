@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -7,6 +8,8 @@ from typing import Literal
 NodeType = Literal["top_event", "intermediate_event", "basic_event", "undeveloped_event", "gate"]
 GateType = Literal["AND", "OR", "K_OF_N"]
 GATE_TYPES = {"AND", "OR", "K_OF_N"}
+FAULT_CLASSIFICATIONS = {"SPF", "RF", "MPF"}
+IEC_61508_FAILURE_CATEGORIES = {"safe", "dangerous", "annunciation", "no_effect"}
 
 
 @dataclass(frozen=True)
@@ -51,21 +54,138 @@ class FaultTreeEdge:
 @dataclass(frozen=True)
 class FmeaRow:
     id: str
+    component: str = ""
     item_function: str = ""
     failure_mode: str = ""
+    failure_mechanism: str = ""
     effect: str = ""
     cause: str = ""
+    safety_mechanism: str = ""
+    fault_tree_event_id: str = ""
+    failure_rate_fit: float = 0.0
+    failure_category: str = "dangerous"
+    dangerous: bool = True
+    diagnostic_coverage_percent: float = 0.0
+    fault_classification: str = "SPF"
+    latent: bool = False
     severity: int = 1
     occurrence: int = 1
     detectability: int = 1
 
-    def to_dict(self) -> dict[str, str | int]:
+    @property
+    def diagnostic_coverage_fraction(self) -> float:
+        return max(0.0, min(self.diagnostic_coverage_percent, 100.0)) / 100.0
+
+    @property
+    def lambda_sd(self) -> float:
+        if self.failure_category != "safe":
+            return 0.0
+        return self.failure_rate_fit * self.diagnostic_coverage_fraction
+
+    @property
+    def lambda_su(self) -> float:
+        if self.failure_category != "safe":
+            return 0.0
+        return self.failure_rate_fit * (1.0 - self.diagnostic_coverage_fraction)
+
+    @property
+    def lambda_dd(self) -> float:
+        if self.failure_category != "dangerous":
+            return 0.0
+        return self.failure_rate_fit * self.diagnostic_coverage_fraction
+
+    @property
+    def lambda_du(self) -> float:
+        if self.failure_category != "dangerous":
+            return 0.0
+        return self.failure_rate_fit * (1.0 - self.diagnostic_coverage_fraction)
+
+    @property
+    def lambda_annunciation(self) -> float:
+        if self.failure_category != "annunciation":
+            return 0.0
+        return self.failure_rate_fit
+
+    @property
+    def lambda_no_effect(self) -> float:
+        if self.failure_category != "no_effect":
+            return 0.0
+        return self.failure_rate_fit
+
+    @property
+    def lambda_spf(self) -> float:
+        if self.failure_category != "dangerous" or self.fault_classification != "SPF":
+            return 0.0
+        return self.failure_rate_fit
+
+    @property
+    def lambda_rf(self) -> float:
+        if self.failure_category != "dangerous" or self.fault_classification != "RF":
+            return 0.0
+        return self.failure_rate_fit
+
+    @property
+    def lambda_mpf(self) -> float:
+        if self.failure_category != "dangerous" or self.fault_classification != "MPF":
+            return 0.0
+        return self.failure_rate_fit
+
+    @property
+    def lambda_latent_mpf(self) -> float:
+        if not self.latent:
+            return 0.0
+        return self.lambda_mpf
+
+    @property
+    def lambda_safe(self) -> float:
+        return self.lambda_sd + self.lambda_su
+
+    @property
+    def lambda_dangerous(self) -> float:
+        return self.lambda_dd + self.lambda_du
+
+    @property
+    def lambda_total(self) -> float:
+        return self.failure_rate_fit
+
+    @property
+    def diagnostic_coverage(self) -> float:
+        dangerous = self.lambda_dangerous
+        if dangerous <= 0:
+            return 0.0
+        return self.lambda_dd / dangerous
+
+    def to_dict(self) -> dict[str, str | int | float]:
         return {
             "id": self.id,
+            "component": self.component,
             "itemFunction": self.item_function,
             "failureMode": self.failure_mode,
+            "failureMechanism": self.failure_mechanism,
             "effect": self.effect,
             "cause": self.cause,
+            "safetyMechanism": self.safety_mechanism,
+            "faultTreeEventId": self.fault_tree_event_id,
+            "failureRateFit": self.failure_rate_fit,
+            "failureCategory": self.failure_category,
+            "dangerous": self.failure_category == "dangerous",
+            "diagnosticCoveragePercent": self.diagnostic_coverage_percent,
+            "faultClassification": self.fault_classification,
+            "latent": self.latent,
+            "lambdaSD": self.lambda_sd,
+            "lambdaSU": self.lambda_su,
+            "lambdaDD": self.lambda_dd,
+            "lambdaDU": self.lambda_du,
+            "lambdaAnnunciation": self.lambda_annunciation,
+            "lambdaNoEffect": self.lambda_no_effect,
+            "lambdaSPF": self.lambda_spf,
+            "lambdaRF": self.lambda_rf,
+            "lambdaMPF": self.lambda_mpf,
+            "lambdaLatentMPF": self.lambda_latent_mpf,
+            "lambdaSafe": self.lambda_safe,
+            "lambdaDangerous": self.lambda_dangerous,
+            "lambdaTotal": self.lambda_total,
+            "diagnosticCoverage": self.diagnostic_coverage,
             "severity": self.severity,
             "occurrence": self.occurrence,
             "detectability": self.detectability,
@@ -140,6 +260,7 @@ class FaultTreeProject:
     def from_dict(cls, payload: dict) -> "FaultTreeProject":
         project_payload = payload.get("project", {})
         analysis_payload = payload.get("analysis", {})
+        fmeda_payload = payload.get("fmeda", payload.get("fmea", []))
         return cls(
             schema_version=payload.get("schemaVersion", "0.1.0"),
             project=ProjectMetadata(
@@ -174,7 +295,7 @@ class FaultTreeProject:
             ],
             fmea=[
                 cls._fmea_from_dict(row, index)
-                for index, row in enumerate(payload.get("fmea", []), start=1)
+                for index, row in enumerate(fmeda_payload, start=1)
             ],
         )
 
@@ -230,6 +351,14 @@ class FaultTreeProject:
                 errors.append(f"FMEA row {row.id} has occurrence outside the 1-10 range.")
             if row.detectability < 1 or row.detectability > 10:
                 errors.append(f"FMEA row {row.id} has detectability outside the 1-10 range.")
+            if not math.isfinite(row.failure_rate_fit) or row.failure_rate_fit < 0:
+                errors.append(f"FMEDA row {row.id} has invalid failureRateFit.")
+            if not math.isfinite(row.diagnostic_coverage_percent) or row.diagnostic_coverage_percent < 0 or row.diagnostic_coverage_percent > 100:
+                errors.append(f"FMEDA row {row.id} has diagnosticCoveragePercent outside the 0-100 range.")
+            if row.fault_classification not in FAULT_CLASSIFICATIONS:
+                errors.append(f"FMEDA row {row.id} has unsupported faultClassification: {row.fault_classification}.")
+            if row.failure_category not in IEC_61508_FAILURE_CATEGORIES:
+                errors.append(f"FMEDA row {row.id} has unsupported failureCategory: {row.failure_category}.")
 
         if self.analysis.mission_time_hours <= 0:
             errors.append("Mission time must be greater than zero.")
@@ -260,13 +389,123 @@ class FaultTreeProject:
 
     @staticmethod
     def _fmea_from_dict(row: dict, index: int) -> FmeaRow:
+        failure_category = FaultTreeProject._failure_category_from_row(row)
         return FmeaRow(
             id=row.get("id", f"fmea-row-{index}"),
+            component=row.get("component", row.get("block", row.get("part", ""))),
             item_function=row.get("itemFunction", row.get("item", "")),
             failure_mode=row.get("failureMode", ""),
+            failure_mechanism=row.get("failureMechanism", row.get("mechanism", "")),
             effect=row.get("effect", ""),
             cause=row.get("cause", ""),
+            safety_mechanism=row.get("safetyMechanism", row.get("diagnostic", "")),
+            fault_tree_event_id=row.get("faultTreeEventId", row.get("basicEventId", row.get("eventId", ""))),
+            failure_rate_fit=FaultTreeProject._failure_rate_fit_from_row(row),
+            failure_category=failure_category,
+            dangerous=failure_category == "dangerous",
+            diagnostic_coverage_percent=FaultTreeProject._diagnostic_coverage_percent_from_row(row),
+            fault_classification=FaultTreeProject._fault_classification_from_row(row),
+            latent=FaultTreeProject._bool_from_row(row, "latent", fallback=False),
             severity=int(row.get("severity", 1) or 1),
             occurrence=int(row.get("occurrence", 1) or 1),
             detectability=int(row.get("detectability", row.get("detection", 1)) or 1),
         )
+
+    @staticmethod
+    def _float_from_row(row: dict, *keys: str) -> float:
+        for key in keys:
+            if key in row and row[key] not in ("", None):
+                return float(row[key])
+        return 0.0
+
+    @staticmethod
+    def _failure_rate_fit_from_row(row: dict) -> float:
+        for key in ("failureRateFit", "fit", "totalFit", "failureRate", "lambdaTotal"):
+            if key in row and row[key] not in ("", None):
+                return float(row[key])
+        return sum(
+            FaultTreeProject._float_from_row(row, *keys)
+            for keys in (
+                ("lambdaSD", "lambdaSd", "lambda_sd"),
+                ("lambdaSU", "lambdaSu", "lambda_su"),
+                ("lambdaDD", "lambdaDd", "lambda_dd"),
+                ("lambdaDU", "lambdaDu", "lambda_du"),
+            )
+        )
+
+    @staticmethod
+    def _diagnostic_coverage_percent_from_row(row: dict) -> float:
+        for key in ("diagnosticCoveragePercent", "dcPercent", "dc"):
+            if key in row and row[key] not in ("", None):
+                return float(row[key])
+        if "diagnosticCoverage" in row and row["diagnosticCoverage"] not in ("", None):
+            coverage = float(row["diagnosticCoverage"])
+            return coverage * 100.0 if coverage <= 1.0 else coverage
+
+        dangerous = FaultTreeProject._dangerous_from_lambda_buckets(row)
+        if dangerous:
+            detected = FaultTreeProject._float_from_row(row, "lambdaDD", "lambdaDd", "lambda_dd")
+            undetected = FaultTreeProject._float_from_row(row, "lambdaDU", "lambdaDu", "lambda_du")
+        else:
+            detected = FaultTreeProject._float_from_row(row, "lambdaSD", "lambdaSd", "lambda_sd")
+            undetected = FaultTreeProject._float_from_row(row, "lambdaSU", "lambdaSu", "lambda_su")
+        total = detected + undetected
+        return (detected / total) * 100.0 if total > 0 else 0.0
+
+    @staticmethod
+    def _dangerous_from_lambda_buckets(row: dict) -> bool:
+        dangerous_total = (
+            FaultTreeProject._float_from_row(row, "lambdaDD", "lambdaDd", "lambda_dd")
+            + FaultTreeProject._float_from_row(row, "lambdaDU", "lambdaDu", "lambda_du")
+        )
+        safe_total = (
+            FaultTreeProject._float_from_row(row, "lambdaSD", "lambdaSd", "lambda_sd")
+            + FaultTreeProject._float_from_row(row, "lambdaSU", "lambdaSu", "lambda_su")
+        )
+        return dangerous_total >= safe_total
+
+    @staticmethod
+    def _fault_classification_from_row(row: dict) -> str:
+        value = str(row.get("faultClassification", row.get("faultType", "SPF")) or "SPF").upper()
+        return value if value in FAULT_CLASSIFICATIONS else "SPF"
+
+    @staticmethod
+    def _failure_category_from_row(row: dict) -> str:
+        raw_value = row.get(
+            "failureCategory",
+            row.get("failureModeCategory", row.get("iec61508FailureCategory")),
+        )
+        if raw_value not in ("", None):
+            normalized = str(raw_value).strip().lower().replace("-", "_").replace(" ", "_")
+            category_aliases = {
+                "safe": "safe",
+                "s": "safe",
+                "dangerous": "dangerous",
+                "d": "dangerous",
+                "annunciation": "annunciation",
+                "annunciated": "annunciation",
+                "a": "annunciation",
+                "no_effect": "no_effect",
+                "noeffect": "no_effect",
+                "ne": "no_effect",
+            }
+            if normalized in category_aliases:
+                return category_aliases[normalized]
+
+        if "dangerous" in row:
+            return "dangerous" if FaultTreeProject._bool_from_row(row, "dangerous", fallback=True) else "safe"
+        return "dangerous" if FaultTreeProject._dangerous_from_lambda_buckets(row) else "safe"
+
+    @staticmethod
+    def _bool_from_row(row: dict, key: str, fallback: bool) -> bool:
+        if key not in row:
+            return fallback
+        value = row[key]
+        if isinstance(value, bool):
+            return value
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true", "yes", "y"}:
+            return True
+        if normalized in {"0", "false", "no", "n"}:
+            return False
+        return fallback

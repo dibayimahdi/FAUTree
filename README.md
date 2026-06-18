@@ -12,6 +12,7 @@ FAUTree is a comprehensive web-based Fault Tree Analysis (FTA) platform consisti
 * Qualitative analysis (Minimal Cut Sets)
 * Quantitative analysis
 * Binary Decision Diagram (BDD) generation and visualization
+* Semiconductor-oriented FMEDA worksheet with IEC 61508 categories and generated exida-style lambda buckets
 * Integrated project management and analysis workflow
 
 
@@ -19,7 +20,7 @@ FAUTree is a comprehensive web-based Fault Tree Analysis (FTA) platform consisti
 
 * Frontend: HTML, CSS, JavaScript
 * Backend: Python
-* Analysis Engine: Fault Tree Analysis, Minimal Cut Set generation, BDD processing
+* Analysis Engine: Fault Tree Analysis, Minimal Cut Set generation, BDD processing, FMEDA aggregation
 
 ## Project Structure
 

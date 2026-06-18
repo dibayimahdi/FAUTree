@@ -10,6 +10,7 @@ from typing import Any
 
 from backend.fautree import __version__
 from backend.fautree.core.bdd import compute_bdd_analysis
+from backend.fautree.core.fmeda import compute_fmeda_summary
 from backend.fautree.core.minimal_cut_sets import compute_minimal_cut_sets
 from backend.fautree.core.model import FaultTreeProject
 from backend.fautree.core.sample import build_sample_project
@@ -114,6 +115,23 @@ class FAUTreeRequestHandler(BaseHTTPRequestHandler):
                     "nodeTypes": ["top_event", "intermediate_event", "basic_event", "undeveloped_event", "gate"],
                     "gateTypes": ["AND", "OR", "K_OF_N"],
                     "gateAttributes": {"K_OF_N": ["votingThreshold"]},
+                    "fmedaProfile": "semiconductor-exida",
+                    "fmedaInputFields": [
+                        "component",
+                        "itemFunction",
+                        "failureMode",
+                        "failureRateFit",
+                        "effect",
+                        "failureCategory",
+                        "safetyMechanism",
+                        "diagnosticCoveragePercent",
+                        "faultClassification",
+                        "latent",
+                        "faultTreeEventId",
+                    ],
+                    "fmedaIec61508FailureCategories": ["safe", "dangerous", "annunciation", "no_effect"],
+                    "fmedaLambdaBuckets": ["lambdaSD", "lambdaSU", "lambdaDD", "lambdaDU", "lambdaAnnunciation", "lambdaNoEffect"],
+                    "fmedaFaultClassifications": ["SPF", "RF", "MPF"],
                     "requiredEdges": ["source", "target"],
                 },
             )
@@ -151,6 +169,48 @@ class FAUTreeRequestHandler(BaseHTTPRequestHandler):
                     400,
                     {
                         "error": "Could not compute minimal cut sets",
+                        "detail": str(error),
+                    },
+                )
+            return
+
+        if self.path == "/api/analyze/fmeda":
+            if not self._allow_rate_limited_request():
+                return
+            try:
+                project = FaultTreeProject.from_dict(self._read_json_body())
+                validation = [
+                    error
+                    for error in project.validate()
+                    if error.startswith("FMEDA row") or error.startswith("FMEA row")
+                ]
+                if validation:
+                    _json_response(
+                        self,
+                        400,
+                        {
+                            "error": "Could not compute FMEDA analysis",
+                            "validation": validation,
+                        },
+                    )
+                    return
+                summary = compute_fmeda_summary(project)
+                _json_response(
+                    self,
+                    200,
+                    {
+                        "algorithm": "Semiconductor FMEDA lambda bucket aggregation",
+                        "profile": "semiconductor-exida",
+                        "project": project.project.to_dict(),
+                        "fmeda": summary.to_dict(),
+                    },
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                _json_response(
+                    self,
+                    400,
+                    {
+                        "error": "Could not compute FMEDA analysis",
                         "detail": str(error),
                     },
                 )
